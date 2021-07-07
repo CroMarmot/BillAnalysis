@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 import argparse
 import csv
 import os
@@ -10,6 +10,29 @@ app = Flask(__name__)
 
 recordLen = 17
 file_path = ""
+db_path = ""
+TABLE_IGNORE = "ignore_table"
+data_mem = []
+ignore_set = set()
+
+col_name = {
+    "交易号": "tradeNo",  # 0
+    "商家订单号": "outNo",  # 1
+    "交易创建时间": "createTime",  # 2
+    "付款时间": "payTime",  # 3
+    "最近修改时间": "modifyTime",  # 4
+    "交易来源地": "source",  # 5
+    "类型": "tradeType",  # 6
+    "交易对方": "opposite",  # 7
+    "商品名称": "productName",  # 8
+    "金额（元）": "amount",  # 9
+    "收/支": "in_out",  # 10
+    "交易状态": "trade_status",  # 11
+    "服务费（元）": "serviceFee",  # 12
+    "成功退款（元）": "successfulRefund",  # 13
+    "备注": "remark",  # 14
+    "资金状态": "fundState",  # 15
+}
 
 
 @app.route("/")
@@ -17,38 +40,18 @@ def index():
     return render_template("index.html")
 
 
-def csv2json(file_path):
-    jsonArr = []
-    with open(file_path) as csvfile:
-        spamreader = csv.reader(csvfile)
-        head = None
-        for row in spamreader:
-            if len(row) == recordLen:
-                if head == None:
-                    head = [x.strip() for x in row]
-                else:
-                    obj = {}
-                    for i in range(recordLen):
-                        if head[i] == '':
-                            continue
-                        obj[head[i]] = row[i].strip().strip('\t')
-                    jsonArr.append(obj)
-    return json.dumps(jsonArr, ensure_ascii=False)
-
-
-def csv2json_file(file_path):
-    json_data = csv2json(file_path)
-    output_path = os.path.splitext(file_path)[0]+'.json'
-    with open(output_path, 'w') as jsonFile:
-        jsonFile.write(json_data)
-        jsonFile.close()
-    print("Done:"+output_path)
-
-
 @app.route("/api/full")
-def full():
-    global file_path
-    return csv2json(file_path)
+def api_full():
+    global data_mem
+    jsonArr = []
+    for row in data_mem:
+        obj = {}
+        for i in range(recordLen):
+            if head[i] == '':
+                continue
+            obj[head[i]] = row[i].strip().strip('\t')
+        jsonArr.append(obj)
+    return json.dumps(jsonArr, ensure_ascii=False)
 
 
 # TODO
@@ -63,35 +66,14 @@ def full():
 def getFilePath():
     parser = argparse.ArgumentParser(description='转换Alipay的交易记录成json')
     parser.add_argument('filepath', help='filepath')
+    parser.add_argument('db', help='db file path')
     args = parser.parse_args()
-    return args.filepath
+    return args.filepath, args.db
 
 
-def csv2sqlite(file_path):
-    table_name = 'alipay'
-
-    col_name = {
-        "交易号": "tradeNo",
-        "商家订单号": "outNo",
-        "交易创建时间": "createTime",
-        "付款时间": "payTime",
-        "最近修改时间": "modifyTime",
-        "交易来源地": "source",
-        "类型": "tradeType",
-        "交易对方": "opposite",
-        "商品名称": "productName",
-        "金额（元）": "amount",
-        "收/支": "in_out",
-        "交易状态": "trade_status",
-        "服务费（元）": "serviceFee",
-        "成功退款（元）": "successfulRefund",
-        "备注": "remark",
-        "资金状态": "fundState",
-    }
-
-    output_path = os.path.splitext(file_path)[0]+'.db'
-    con = sqlite3.connect(output_path)
-    cur = con.cursor()
+def csv2mem(file_path):
+    global data_mem
+    data_mem = []
 
     with open(file_path) as csvfile:
         spamreader = csv.reader(csvfile)
@@ -100,99 +82,157 @@ def csv2sqlite(file_path):
             if len(row) == recordLen:
                 if head == None:
                     # 最后一个是空格
-                    head = [col_name[x.strip()] + " text" for x in row[:-1]]
-                    execute_sql = "CREATE TABLE " + \
-                        table_name + " (" + ",".join(head) + ")"
-                    cur.execute(execute_sql)
+                    head = [x.strip().strip('\t') for x in row[:-1]]
                 else:
-                    cur.execute("insert into " + table_name + " values (" + ",".join(
-                        ["?" for i in row[:-1]]) + ")", [x.strip().strip("\t") for x in row[:-1]])
+                    data_mem.append([x.strip().strip("\t") for x in row[:-1]])
 
+
+@app.route("/api/ignore_no", methods=["POST"])
+def api_ignore_no():
+    global db_path
+    queryData = json.loads(request.get_data(as_text=True))
+
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+    ignore_set.add(queryData["no"])
+    # TODO duplicate insert
+    cur.execute("insert into " + TABLE_IGNORE +
+                " values ('" + queryData["no"] + "')")
     con.commit()
     con.close()
-    print("Done:"+output_path)
+    return json.dumps({"status": 200}, ensure_ascii=False)
 
 
 @app.route("/api/month")
-def month():
-    global file_path
+def api_month():
     month = {}
-    with open(file_path) as csvfile:
-        spamreader = csv.reader(csvfile)
-        head = None
-        for row in spamreader:
-            if len(row) == recordLen:
-                if head == None:
-                    # 最后一个是空格
-                    head = row[:-1]
-                else:
-                    row = [x.strip().strip('\t') for x in row[:-1]]
-                    # 创建时间 支付时间可能为空
-                    dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-                    opposite = row[7]
-                    product_name = row[8]
-                    amount = row[9]
-                    in_out = row[10]
-                    trade_status = row[11]
-                    month_str = "{0:%Y-%m}".format(dateobj)
-                    week_str = "{0:%Y-%W}".format(dateobj)
+    global file_path, data_mem
+    for row in data_mem:
+        # 创建时间 支付时间可能为空
+        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        no = row[0]
+        amount = row[9]
+        refund = row[13]
+        in_out = row[10]
+        month_str = "{0:%Y-%m}".format(dateobj)
+        if no in ignore_set:
+            continue
 
-                    if month_str not in month:
-                        month[month_str] = {
-                            "in_cnt": 0,
-                            "out_cnt": 0
-                        }
-                    if in_out == '支出':
-                        month[month_str]["out_cnt"] += round(100*float(amount))
-                    else:  # 收入
-                        month[month_str]["in_cnt"] += round(100*float(amount))
+        if month_str not in month:
+            month[month_str] = {
+                "in_cnt": 0,
+                "out_cnt": 0
+            }
+        if in_out == '支出':
+            month[month_str]["out_cnt"] += round(100 *
+                                                 (float(amount) - float(refund)))
+        else:  # 收入
+            month[month_str]["in_cnt"] += round(100*float(amount))
     return json.dumps(month, ensure_ascii=False)
 
 
-@app.route("/api/week")
-def week():
-    global file_path
-    week = {}
-    with open(file_path) as csvfile:
-        spamreader = csv.reader(csvfile)
-        head = None
-        for row in spamreader:
-            if len(row) == recordLen:
-                if head == None:
-                    # 最后一个是空格
-                    head = row[:-1]
-                else:
-                    row = [x.strip().strip('\t') for x in row[:-1]]
-                    # 创建时间 支付时间可能为空
-                    dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-                    opposite = row[7]
-                    product_name = row[8]
-                    amount = row[9]
-                    in_out = row[10]
-                    trade_status = row[11]
-                    month_str = "{0:%Y-%m}".format(dateobj)
-                    week_str = "{0:%Y-%W}".format(dateobj)
+@app.route("/api/month_query", methods=['POST'])
+def api_month_query():
+    queryData = json.loads(request.get_data(as_text=True))
+    # 默认查询支出
+    if "in_out" not in queryData:
+        queryData["in_out"] = "支出"
 
-                    if week_str not in week:
-                        week[week_str] = {
-                            "in_cnt": 0,
-                            "out_cnt": 0
-                        }
-                    if in_out == '支出':
-                        week[week_str]["out_cnt"] += round(100*float(amount))
-                    else:  # 收入
-                        week[week_str]["in_cnt"] += round(100*float(amount))
+    month_result = []
+    global file_path, data_mem
+    for row in data_mem:
+        # 创建时间 支付时间可能为空
+        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        no = row[0]
+        in_out = row[10]
+        month_str = "{0:%Y-%m}".format(dateobj)
+        if no in ignore_set:
+            continue
+
+        if month_str != queryData["key"]:
+            continue
+
+        if in_out != queryData["in_out"]:
+            continue
+
+        month_result.append(row)
+    return json.dumps(month_result, ensure_ascii=False)
+
+
+@app.route("/api/week")
+def api_week():
+    week = {}
+    global file_path, data_mem
+    for row in data_mem:
+        # 创建时间 支付时间可能为空
+        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        no = row[0]
+        amount = row[9]
+        refund = row[13]
+        in_out = row[10]
+        week_str = "{0:%Y-%W}".format(dateobj)
+        if no in ignore_set:
+            continue
+
+        if week_str not in week:
+            week[week_str] = {
+                "in_cnt": 0,
+                "out_cnt": 0
+            }
+        if in_out == '支出':
+            week[week_str]["out_cnt"] += round(100 *
+                                               (float(amount)-float(refund)))
+        else:  # 收入
+            week[week_str]["in_cnt"] += round(100*float(amount))
     return json.dumps(week, ensure_ascii=False)
 
 
+@app.route("/api/week_query", methods=['POST'])
+def api_week_query():
+    queryData = json.loads(request.get_data(as_text=True))
+    # 默认查询支出
+    if "in_out" not in queryData:
+        queryData["in_out"] = "支出"
+    global file_path, data_mem
+    week_result = []
+    for row in data_mem:
+        # 创建时间 支付时间可能为空
+        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        no = row[0]
+        in_out = row[10]
+        week_str = "{0:%Y-%W}".format(dateobj)
+        if no in ignore_set:
+            continue
+
+        if week_str != queryData["key"]:
+            continue
+
+        if in_out != queryData["in_out"]:
+            continue
+
+        week_result.append(row)
+    return json.dumps(week_result, ensure_ascii=False)
+
+
 def main():
-    global file_path
-    file_path = getFilePath()
+    global file_path, db_path, ignore_set
+    file_path, db_path = getFilePath()
+
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS " +
+                TABLE_IGNORE + " (ignore_no text primary key)")
+    cur.execute("SELECT ignore_no from " + TABLE_IGNORE + "")
+    ignore_list = cur.fetchall()
+    con.commit()
+    con.close()
+
+    for row in ignore_list:
+        ignore_set.add(row[0])
+
+    csv2mem(file_path)
 
     app.run()
-    # csv2json_file(file_path)
-    # # csv2sqlite(file_path)
-    # csv2report(file_path)
 
 
 if __name__ == "__main__":
