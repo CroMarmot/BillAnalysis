@@ -53,11 +53,13 @@ npm run dev
 
 ## Version
 
-* 0.1.0 迁移到React
+* 0.1.x 迁移到React
 
 启用 Next.js 代码迁移到React 中
 
-* 0.0.3 基本功能实现
+原生js向reactjs tsx改动，关联关系和用户操作状态记录
+
+* 0.0.x 基本功能实现
 
 flask + echarts5 + sqlite3 + 原生js
 
