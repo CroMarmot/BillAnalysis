@@ -26,7 +26,7 @@ db 填写路径即可，没有的话会自动生成
 server使用示例
 
 ```
-python3 alipay2json alipay_record_20210630_1612_1.csv alipay_record_20210630_1612_1.db
+python3 alipay2json alipay_record_20210630_1612_1.csv alipay_record_all.db
 ```
 
 front_end

@@ -48,7 +48,13 @@ const genTh = (text_content_or_element: string | HTMLElement) => {
   return el;
 };
 
-const query_and_draw_table = (api, query_json, title_el, table_el) => {
+const query_and_draw_table = (
+  url_prefix,
+  api,
+  query_json,
+  title_el,
+  table_el
+) => {
   return fetch(api, {
     method: "POST",
     headers: {
@@ -97,7 +103,7 @@ const query_and_draw_table = (api, query_json, title_el, table_el) => {
             genTr([
               genTd(
                 genButton("Ignore", () => {
-                  fetch("/api/ignore_no", {
+                  fetch(`${url_prefix}/api/ignore_no`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -112,6 +118,7 @@ const query_and_draw_table = (api, query_json, title_el, table_el) => {
                       if (r.status == 200) {
                         // TODO refresh_page();
                         query_and_draw_table(
+                          url_prefix,
                           api,
                           query_json,
                           title_el,
@@ -136,12 +143,14 @@ const query_and_draw_table = (api, query_json, title_el, table_el) => {
 };
 
 const getInfo = function ({
+  url_prefix,
   api_all,
   api_query,
   echarts_div,
   echarts_title,
   detail_div,
 }: {
+  url_prefix: string;
   api_all: string;
   api_query: string;
   echarts_div: HTMLElement;
@@ -182,6 +191,7 @@ const getInfo = function ({
 
       myChart.on("click", ({ dataIndex }) => {
         query_and_draw_table(
+          url_prefix,
           api_query,
           {
             key: Object.keys(data)[dataIndex],
@@ -205,6 +215,7 @@ export default function MonthRecord({ url_prefix }: { url_prefix: string }) {
 
   useEffect(() => {
     getInfo({
+      url_prefix,
       api_all: `${url_prefix}/api/month`,
       api_query: `${url_prefix}/api/month_query`,
       echarts_div: echarts_div.current,

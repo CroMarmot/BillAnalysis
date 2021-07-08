@@ -143,12 +143,14 @@ const query_and_draw_table = (
 };
 
 const getInfo = function ({
+  url_prefix,
   api_all,
   api_query,
   echarts_div,
   echarts_title,
   detail_div,
 }: {
+  url_prefix: string;
   api_all: string;
   api_query: string;
   echarts_div: HTMLElement;
@@ -213,6 +215,7 @@ export default function WeekRecord({ url_prefix }: { url_prefix: string }) {
 
   useEffect(() => {
     getInfo({
+      url_prefix,
       api_all: `${url_prefix}/api/week`,
       api_query: `${url_prefix}/api/week_query`,
       echarts_div: echarts_div.current,
