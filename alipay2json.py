@@ -6,6 +6,7 @@ import json
 import sqlite3
 from datetime import datetime
 
+
 app = Flask(__name__)
 
 recordLen = 17
@@ -86,20 +87,37 @@ def csv2mem(file_path):
                 else:
                     data_mem.append([x.strip().strip("\t") for x in row[:-1]])
 
+    data_mem.reverse()
+
 
 @app.route("/api/ignore_no", methods=["POST"])
 def api_ignore_no():
     global db_path
     queryData = json.loads(request.get_data(as_text=True))
+    op = queryData["op"]
+    if op == 'append':
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        ignore_set.add(queryData["no"])
+        # TODO duplicate insert
+        cur.execute(f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
+        con.commit()
+        con.close()
+    elif op == "remove":
+        if queryData["no"] in ignore_set:
+            con = sqlite3.connect(db_path)
+            cur = con.cursor()
+            ignore_set.remove(queryData["no"])
+            # TODO duplicate insert
+            cur.execute(
+                f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
 
-    con = sqlite3.connect(db_path)
-    cur = con.cursor()
-    ignore_set.add(queryData["no"])
-    # TODO duplicate insert
-    cur.execute("insert into " + TABLE_IGNORE +
-                " values ('" + queryData["no"] + "')")
-    con.commit()
-    con.close()
+            con.commit()
+            con.close()
+        else:
+            return json.dumps({"status": 418}, ensure_ascii=False), 418
+    else:
+        return json.dumps({"status": 418}, ensure_ascii=False), 418
     return json.dumps({"status": 200}, ensure_ascii=False)
 
 
@@ -212,6 +230,30 @@ def api_week_query():
 
         week_result.append(row)
     return json.dumps(week_result, ensure_ascii=False)
+
+
+@app.route("/api/ignore_list", methods=["POST"])
+def api_ignore_list():
+    global ignore_set, data_mem
+
+    queryData = json.loads(request.get_data(as_text=True))
+    # 默认查询支出
+    if "in_out" not in queryData:
+        queryData["in_out"] = "支出"
+
+    result = []
+    for row in data_mem:
+        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+        no = row[0]
+        in_out = row[10]
+        if no not in ignore_set:
+            continue
+
+        if in_out != queryData["in_out"]:
+            continue
+
+        result.append(row)
+    return json.dumps(result, ensure_ascii=False)
 
 
 def main():

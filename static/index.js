@@ -40,6 +40,7 @@ const genTh = (elements) => {
     return el;
 }
 
+
 const query_and_draw_table = (api, query_json, table_el) => {
     return fetch(api, {
             method: "POST",
@@ -50,49 +51,59 @@ const query_and_draw_table = (api, query_json, table_el) => {
         })
         .then(res => res.json())
         .then(query_response => {
-            table_el.innerHTML = ''
-            table_el.appendChild(genTr([
-                genTd(""),
-                genTd(genButton("商家", () => {
-                    console.warn("商家")
-                })),
-                genTd(genButton("金额", () => {
-                    console.warn("金额")
-                })),
-                genTd(genButton("交易时间", () => {
-                    console.warn("交易时间")
-                })),
-            ]));
-            query_response.forEach(element => {
-                // TODO string safe
-                table_el.appendChild(
-                    genTr([
-                        genTd(genButton("Ignore", () => {
-                            fetch("/api/ignore_no", {
-                                    method: "POST",
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        no: element[0]
+            const draw_table = (table_data) => {
+                table_el.innerHTML = ''
+                table_el.appendChild(genTr([
+                    genTd(""),
+                    genTd(genButton("商家", () => {
+                        // TODO 增加 remark功能
+                        // TODO 专门一个位置做数组下标抽象
+                        table_data.sort((item_a, item_b) => item_a[7] > item_b[7] ? 1 : -1)
+                        draw_table(table_data);
+                    })),
+                    genTd(genButton("金额", () => {
+                        table_data.sort((item_a, item_b) => Number(item_b[9]) - Number(item_a[9]))
+                        draw_table(table_data);
+                    })),
+                    genTd(genButton("交易时间", () => {
+                        table_data.sort((item_a, item_b) => item_a[2] > item_b[2] ? 1 : -1)
+                        draw_table(table_data);
+                    })),
+                ]));
+                table_data.forEach(element => {
+                    // TODO string safe
+                    table_el.appendChild(
+                        genTr([
+                            genTd(genButton("Ignore", () => {
+                                fetch("/api/ignore_no", {
+                                        method: "POST",
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            op: "append",
+                                            no: element[0]
+                                        })
                                     })
-                                })
-                                .then(res => res.json())
-                                .then((r) => {
-                                    if (r.status == 200) {
-                                        refresh_page();
-                                        query_and_draw_table(api, query_json, table_el)
-                                    }
-                                })
-                        })),
-                        genTd(`${element[7]}`),
-                        genTd(`${element[9]}`),
-                        genTd(`${element[2].substr(5)}`),
-                        genTd(element[11] !== '交易成功' ? `${element[11]}` : ''),
-                        genTd(Number(element[13]) !== 0 ? `${element[13]}` : '')
-                    ])
-                )
-            });
+                                    .then(res => res.json())
+                                    .then((r) => {
+                                        if (r.status == 200) {
+                                            refresh_page();
+                                            query_and_draw_table(api, query_json, table_el)
+                                        }
+                                    })
+                            })),
+                            genTd(`${element[7]}`),
+                            genTd(`${element[9]}`),
+                            genTd(`${element[2]}`),
+                            genTd(element[11] !== '交易成功' ? `${element[11]}` : ''),
+                            genTd(Number(element[13]) !== 0 ? `${element[13]}` : '')
+                        ])
+                    )
+                });
+            }
+
+            draw_table(query_response);
         })
 }
 
@@ -120,7 +131,7 @@ const getInfo = function ({
                     data: ['出账']
                 },
                 xAxis: {
-                    data: Object.keys(data)
+                    data: Object.keys(data).map(s => s.split("-")[1])
                 },
                 yAxis: {},
                 series: [{
@@ -164,12 +175,56 @@ const getWeek = () => {
     })
 };
 
+const getIgnoreList = () => {
+    const ignore_table = document.getElementById("ignore_table")
+    ignore_table.innerHTML = ''
+    fetch("/api/ignore_list", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        })
+        .then(res => res.json())
+        .then(r => {
+            r.forEach(element => {
+                ignore_table.appendChild(genTr([
+                    genTd(genButton("Cancel Ignore", () => {
+                        fetch("/api/ignore_no", {
+                                method: "POST",
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    op: "remove",
+                                    no: element[0]
+                                })
+                            })
+                            .then(res => res.json())
+                            .then((r) => {
+                                if (r.status == 200) {
+                                    refresh_page();
+                                }
+                            })
+                    })),
+                    genTd(`${element[7]}`),
+                    genTd(`${element[9]}`),
+                    genTd(`${element[2]}`),
+                    genTd(element[11] !== '交易成功' ? `${element[11]}` : ''),
+                    genTd(Number(element[13]) !== 0 ? `${element[13]}` : '')
+                ]))
+            });
+        })
+
+}
+
 const clear_page = () => {}
 
 const refresh_page = () => {
     clear_page();
     getMonth();
     getWeek();
+    getIgnoreList();
 }
 
 const main = () => {
