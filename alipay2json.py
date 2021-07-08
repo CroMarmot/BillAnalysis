@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+from flask_cors import CORS
 import argparse
 import csv
 import os
@@ -8,6 +9,8 @@ from datetime import datetime
 
 
 app = Flask(__name__)
+# 不用cors的话 可以用nginx
+CORS(app)
 
 recordLen = 17
 file_path = ""
