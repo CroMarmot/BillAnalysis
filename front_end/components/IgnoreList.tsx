@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Button from "@material-ui/core/Button";
 
 const getIgnoreList = ({
   url_prefix,
@@ -68,9 +69,13 @@ const IgnoreList = ({
           {ignore_list.map((element: string[]) => (
             <tr key={element[0]}>
               <td>
-                <button onClick={() => ignore_item(element)}>
+                <Button
+                  onClick={() => ignore_item(element)}
+                  variant="contained"
+                  color="primary"
+                >
                   Cancel Ignore
-                </button>
+                </Button>
               </td>
               <td>{element[7]}</td>
               <td>{element[9]}</td>

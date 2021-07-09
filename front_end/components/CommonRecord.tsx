@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
+import Button from "@material-ui/core/Button";
+
+import { makeStyles } from "@material-ui/core/styles";
+import Table from "@material-ui/core/Table";
+import TableBody from "@material-ui/core/TableBody";
+import TableCell from "@material-ui/core/TableCell";
+import TableContainer from "@material-ui/core/TableContainer";
+import TableHead from "@material-ui/core/TableHead";
+import TableRow from "@material-ui/core/TableRow";
+import Paper from "@material-ui/core/Paper";
+
+const useStyles = makeStyles({
+  table: {
+    minWidth: 650,
+  },
+});
 
 const getInfo = ({
   api_all,
@@ -62,10 +78,12 @@ const CommonRecord = ({
 }) => {
   const styles = {
     canvas: {
-      width: 600,
-      height: 400,
+      width: 800,
+      height: 600,
     },
   };
+  const classes = useStyles();
+
   const echarts_div = useRef() as React.MutableRefObject<HTMLDivElement>;
   const [detail_state, set_detail_state] = useState([]);
   const [sort_col, set_sort_col] = useState(3);
@@ -101,7 +119,7 @@ const CommonRecord = ({
     }
   };
 
-  const tbody_rows = () => {
+  const material_table = () => {
     const table_data = detail_state;
     // 商家
     if (sort_col === 1) {
@@ -119,18 +137,60 @@ const CommonRecord = ({
         (item_a, item_b) => sort_order * (item_a[2] > item_b[2] ? 1 : -1)
       );
     }
-    return table_data.map((element: string[]) => (
-      <tr key={element[0]}>
-        <td>
-          <button onClick={() => ignoreItem(element)}>Ignore</button>
-        </td>
-        <td>{element[7]}</td>
-        <td>{element[9]}</td>
-        <td>{element[2].substr(5)}</td>
-        <td>{element[11] !== "交易成功" ? `${element[11]}` : ""}</td>
-        <td>{Number(element[13]) !== 0 ? `${element[13]}` : ""}</td>
-      </tr>
-    ));
+
+    return (
+      <div>
+        <h2>{query_month}</h2>
+        <TableContainer component={Paper}>
+          <Table
+            className={classes.table}
+            size="small"
+            aria-label="simple table"
+          >
+            <TableHead>
+              <TableRow>
+                <TableCell></TableCell>
+                <TableCell align="right">
+                  <button onClick={() => set_sort(1)}>商家</button>
+                </TableCell>
+                <TableCell align="right">
+                  <button onClick={() => set_sort(2)}>金额</button>
+                </TableCell>
+                <TableCell align="right">
+                  <button onClick={() => set_sort(3)}>交易时间</button>
+                </TableCell>
+                <TableCell align="right">状态</TableCell>
+                <TableCell align="right">退款</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {table_data.map((element: string[]) => (
+                <TableRow key={element[0]}>
+                  <TableCell component="th" scope="row">
+                    <Button
+                      onClick={() => ignoreItem(element)}
+                      variant="contained"
+                      color="primary"
+                    >
+                      Ignore
+                    </Button>
+                  </TableCell>
+                  <TableCell align="right">{element[7]}</TableCell>
+                  <TableCell align="right">{element[9]}</TableCell>
+                  <TableCell align="right">{element[2].substr(5)}</TableCell>
+                  <TableCell align="right">
+                    {element[11] !== "交易成功" ? `${element[11]}` : ""}
+                  </TableCell>
+                  <TableCell align="right">
+                    {Number(element[13]) !== 0 ? `${element[13]}` : ""}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -167,23 +227,7 @@ const CommonRecord = ({
   return (
     <>
       <div style={styles.canvas} ref={echarts_div}></div>
-      <table>
-        <thead>
-          <tr>
-            <th></th>
-            <th>
-              <button onClick={() => set_sort(1)}>商家</button>
-            </th>
-            <th>
-              <button onClick={() => set_sort(2)}>金额</button>
-            </th>
-            <th>
-              <button onClick={() => set_sort(3)}>交易时间</button>
-            </th>
-          </tr>
-        </thead>
-        <tbody>{tbody_rows()}</tbody>
-      </table>
+      {material_table()}
     </>
   );
 };
