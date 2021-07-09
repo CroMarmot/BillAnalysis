@@ -19,14 +19,14 @@
 
 # 使用
 
-`python3 alipay2json.py <your alipay csv> <your db path>`
+`python3 alipay2json.py <your db path>`
 
 db 填写路径即可，没有的话会自动生成
 
 server使用示例
 
 ```
-python3 alipay2json alipay_record_20210630_1612_1.csv alipay_record_all.db
+python3 alipay2json alipay_record_all.db
 ```
 
 front_end
@@ -38,24 +38,34 @@ yarn start
 
 # 当前功能
 
+上传csv文件
+
 查看 月/周 统计
 
-查看 月/周 详情。支持金额,名称,交易时间排序
+查看 月/周 详情。
+
+支持金额,名称,交易时间排序
 
 标记忽略，查看忽略列表，撤销标记
+
 # TODO
 
 - [ ] 读取备注，增加备注
 - [ ] 支持腾讯账单
 - [ ] 详情饼图 
-- [ ] 优化刷新，保持操作状态关系
+- [ ] Ignore 导入 导出 scripts
+- [ ] 上传管理
+- [ ] 支持 编码自动识别
 - [ ] 使用RxJs?
+- [ ] 总额均值
 
 ## Version
 
 * 0.2.x 弃用Next
 
 Next 不使用SSR较复杂，有些三方库SSR支持也复杂，本身也不需要SSR，迁移
+
+支持上传 csv
 
 * 0.1.x 迁移到React
 

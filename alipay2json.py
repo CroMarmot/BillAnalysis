@@ -1,3 +1,5 @@
+from flask.sessions import NullSession
+from alipay_analysis import AlipayAnalysis, IgnoreSet, TABLE_IGNORE
 from flask import Flask, render_template, request
 from flask_cors import CORS
 import argparse
@@ -12,67 +14,15 @@ app = Flask(__name__)
 # 不用cors的话 可以用nginx
 CORS(app)
 
-recordLen = 17
-file_path = ""
-db_path = ""
-TABLE_IGNORE = "ignore_table"
-data_mem = []
-ignore_set = set()
-
-col_name = {
-    "交易号": "tradeNo",  # 0
-    "商家订单号": "outNo",  # 1
-    "交易创建时间": "createTime",  # 2
-    "付款时间": "payTime",  # 3
-    "最近修改时间": "modifyTime",  # 4
-    "交易来源地": "source",  # 5
-    "类型": "tradeType",  # 6
-    "交易对方": "opposite",  # 7
-    "商品名称": "productName",  # 8
-    "金额（元）": "amount",  # 9
-    "收/支": "in_out",  # 10
-    "交易状态": "trade_status",  # 11
-    "服务费（元）": "serviceFee",  # 12
-    "成功退款（元）": "successfulRefund",  # 13
-    "备注": "remark",  # 14
-    "资金状态": "fundState",  # 15
-}
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/api/full")
-def api_full():
-    global data_mem
-    jsonArr = []
-    for row in data_mem:
-        obj = {}
-        for i in range(recordLen):
-            if head[i] == '':
-                continue
-            obj[head[i]] = row[i].strip().strip('\t')
-        jsonArr.append(obj)
-    return json.dumps(jsonArr, ensure_ascii=False)
-
-
-# TODO
-# feature:
-# 查看月曲线
-# 查看周曲线
-# 查看月详情
-# 查看周详情
-# 标记忽略 / 取消忽略标记 / 查看忽略标记列表
+alipay_groups = {}
+ig_set = None
 
 
 def getFilePath():
-    parser = argparse.ArgumentParser(description='转换Alipay的交易记录成json')
-    parser.add_argument('filepath', help='filepath')
+    parser = argparse.ArgumentParser(description='处理Alipay的交易记录')
     parser.add_argument('db', help='db file path')
     args = parser.parse_args()
-    return args.filepath, args.db
+    return args.db
 
 
 def csv2mem(file_path):
@@ -93,189 +43,143 @@ def csv2mem(file_path):
     data_mem.reverse()
 
 
-@app.route("/api/ignore_no", methods=["POST"])
-def api_ignore_no():
-    global db_path
-    queryData = json.loads(request.get_data(as_text=True))
+def ignore_no(queryData):
+    global ig_set, db_path
+    ignore_set = ig_set.ignore_set
     op = queryData["op"]
     if op == 'append':
         con = sqlite3.connect(db_path)
         cur = con.cursor()
         ignore_set.add(queryData["no"])
         # TODO duplicate insert
-        cur.execute(f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
+        cur.execute(
+            f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
         con.commit()
         con.close()
     elif op == "remove":
-        if queryData["no"] in ignore_set:
-            con = sqlite3.connect(db_path)
-            cur = con.cursor()
-            ignore_set.remove(queryData["no"])
-            # TODO duplicate insert
-            cur.execute(
-                f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
+        if queryData["no"] not in ignore_set:
+            return False
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        ignore_set.remove(queryData["no"])
+        # TODO duplicate insert
+        cur.execute(
+            f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
 
-            con.commit()
-            con.close()
-        else:
-            return json.dumps({"status": 418}, ensure_ascii=False), 418
+        con.commit()
+        con.close()
     else:
-        return json.dumps({"status": 418}, ensure_ascii=False), 418
+        return False
+    return True
+
+
+@app.route("/api/ignore_no", methods=["POST"])
+def api_ignore_no():
+    queryData = json.loads(request.get_data(as_text=True))
+
+    ins_result = ignore_no(queryData)
+    # TODO merge instead of replace
+    if not ins_result:
+        return json.dumps({"status": 418}), 418
+
     return json.dumps({"status": 200}, ensure_ascii=False)
 
 
 @app.route("/api/month")
 def api_month():
     month = {}
-    global file_path, data_mem
-    for row in data_mem:
-        # 创建时间 支付时间可能为空
-        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-        no = row[0]
-        amount = row[9]
-        refund = row[13]
-        in_out = row[10]
-        month_str = "{0:%Y-%m}".format(dateobj)
-        if no in ignore_set:
-            continue
+    global alipay_groups
+    for key in alipay_groups:
+        alipay_ins = alipay_groups[key]
+        ins_month = alipay_ins.month()
+        # TODO merge instead of replace
+        for k in ins_month:
+            month[k] = ins_month[k]
 
-        if month_str not in month:
-            month[month_str] = {
-                "in_cnt": 0,
-                "out_cnt": 0
-            }
-        if in_out == '支出':
-            month[month_str]["out_cnt"] += round(100 *
-                                                 (float(amount) - float(refund)))
-        else:  # 收入
-            month[month_str]["in_cnt"] += round(100*float(amount))
     return json.dumps(month, ensure_ascii=False)
 
 
 @app.route("/api/month_query", methods=['POST'])
 def api_month_query():
     queryData = json.loads(request.get_data(as_text=True))
-    # 默认查询支出
-    if "in_out" not in queryData:
-        queryData["in_out"] = "支出"
+    result = []
 
-    month_result = []
-    global file_path, data_mem
-    for row in data_mem:
-        # 创建时间 支付时间可能为空
-        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-        no = row[0]
-        in_out = row[10]
-        month_str = "{0:%Y-%m}".format(dateobj)
-        if no in ignore_set:
-            continue
+    global alipay_groups
+    for key in alipay_groups:
+        alipay_ins = alipay_groups[key]
+        ins_result = alipay_ins.month_query(queryData)
+        # TODO merge instead of replace
+        result += ins_result
 
-        if month_str != queryData["key"]:
-            continue
-
-        if in_out != queryData["in_out"]:
-            continue
-
-        month_result.append(row)
-    return json.dumps(month_result, ensure_ascii=False)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @app.route("/api/week")
 def api_week():
     week = {}
-    global file_path, data_mem
-    for row in data_mem:
-        # 创建时间 支付时间可能为空
-        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-        no = row[0]
-        amount = row[9]
-        refund = row[13]
-        in_out = row[10]
-        week_str = "{0:%Y-%W}".format(dateobj)
-        if no in ignore_set:
-            continue
+    global alipay_groups
+    for key in alipay_groups:
+        alipay_ins = alipay_groups[key]
+        ins_week = alipay_ins.week()
+        # TODO merge instead of replace
+        for k in ins_week:
+            week[k] = ins_week[k]
 
-        if week_str not in week:
-            week[week_str] = {
-                "in_cnt": 0,
-                "out_cnt": 0
-            }
-        if in_out == '支出':
-            week[week_str]["out_cnt"] += round(100 *
-                                               (float(amount)-float(refund)))
-        else:  # 收入
-            week[week_str]["in_cnt"] += round(100*float(amount))
     return json.dumps(week, ensure_ascii=False)
 
 
 @app.route("/api/week_query", methods=['POST'])
 def api_week_query():
     queryData = json.loads(request.get_data(as_text=True))
-    # 默认查询支出
-    if "in_out" not in queryData:
-        queryData["in_out"] = "支出"
-    global file_path, data_mem
-    week_result = []
-    for row in data_mem:
-        # 创建时间 支付时间可能为空
-        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-        no = row[0]
-        in_out = row[10]
-        week_str = "{0:%Y-%W}".format(dateobj)
-        if no in ignore_set:
-            continue
+    result = []
 
-        if week_str != queryData["key"]:
-            continue
+    global alipay_groups
+    for key in alipay_groups:
+        alipay_ins = alipay_groups[key]
+        ins_result = alipay_ins.week_query(queryData)
+        # TODO merge instead of replace
+        result += ins_result
 
-        if in_out != queryData["in_out"]:
-            continue
-
-        week_result.append(row)
-    return json.dumps(week_result, ensure_ascii=False)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @app.route("/api/ignore_list", methods=["POST"])
 def api_ignore_list():
-    global ignore_set, data_mem
-
     queryData = json.loads(request.get_data(as_text=True))
-    # 默认查询支出
-    if "in_out" not in queryData:
-        queryData["in_out"] = "支出"
-
     result = []
-    for row in data_mem:
-        dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-        no = row[0]
-        in_out = row[10]
-        if no not in ignore_set:
-            continue
 
-        if in_out != queryData["in_out"]:
-            continue
+    global alipay_groups
+    for key in alipay_groups:
+        alipay_ins = alipay_groups[key]
+        ins_result = alipay_ins.ignore_list(queryData)
+        # TODO merge instead of replace
+        result += ins_result
 
-        result.append(row)
     return json.dumps(result, ensure_ascii=False)
 
 
+@app.route('/upload', methods=['POST'])
+def upload():
+    global alipay_groups
+    if request.method == 'POST':
+        f = request.files['file']
+        # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
+        # TODO safe filename
+        upload_path = os.path.join(os.path.dirname(
+            __file__), 'tmp/uploads', f.filename)
+        f.save(upload_path)
+        print(upload_path)
+        # TODO support any encode
+        alipay_groups[upload_path] = AlipayAnalysis(
+            upload_path, ig_set.ignore_set)
+
+    return json.dumps({"ok": "?"}, ensure_ascii=False)
+
+
 def main():
-    global file_path, db_path, ignore_set
-    file_path, db_path = getFilePath()
-
-    con = sqlite3.connect(db_path)
-    cur = con.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS " +
-                TABLE_IGNORE + " (ignore_no text primary key)")
-    cur.execute("SELECT ignore_no from " + TABLE_IGNORE + "")
-    ignore_list = cur.fetchall()
-    con.commit()
-    con.close()
-
-    for row in ignore_list:
-        ignore_set.add(row[0])
-
-    csv2mem(file_path)
+    global db_path, ig_set
+    db_path = getFilePath()
+    ig_set = IgnoreSet(db_path)
 
     app.run()
 

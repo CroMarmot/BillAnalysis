@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import CommonRecord from "../components/CommonRecord";
 import IgnoreList from "../components/IgnoreList";
+import DataManager from "../components/DataManager";
 
 import { makeStyles, Theme } from "@material-ui/core/styles";
 import AppBar from "@material-ui/core/AppBar";
@@ -76,6 +77,7 @@ export default function Home() {
               <Tab label="月出账" {...a11yProps(0)} />
               <Tab label="周出账" {...a11yProps(1)} />
               <Tab label="忽略列表" {...a11yProps(2)} />
+              <Tab label="数据管理" {...a11yProps(3)} />
             </Tabs>
           </AppBar>
           <TabPanel value={value} index={0}>
@@ -100,6 +102,13 @@ export default function Home() {
           </TabPanel>
           <TabPanel value={value} index={2}>
             <IgnoreList
+              url_prefix={url_prefix}
+              refresh={updated}
+              updateFn={doUpdate}
+            />
+          </TabPanel>
+          <TabPanel value={value} index={3}>
+            <DataManager
               url_prefix={url_prefix}
               refresh={updated}
               updateFn={doUpdate}

@@ -1,2 +1,4 @@
 alipay_record_*
 .vscode
+__pycache__
+tmp
