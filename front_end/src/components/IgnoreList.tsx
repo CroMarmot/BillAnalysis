@@ -45,7 +45,7 @@ const IgnoreList = ({
     })
       .then((res) => res.json())
       .then((r) => {
-        if (r.status == 200) {
+        if (r.status === 200) {
           updateFn();
         }
       });

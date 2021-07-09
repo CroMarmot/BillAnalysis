@@ -1,7 +1,6 @@
-import Head from "next/head";
 import React, { useState } from "react";
-import CommonRecord from "../src/components/CommonRecord";
-import IgnoreList from "../src/components/IgnoreList";
+import CommonRecord from "../components/CommonRecord";
+import IgnoreList from "../components/IgnoreList";
 
 import { makeStyles, Theme } from "@material-ui/core/styles";
 import AppBar from "@material-ui/core/AppBar";
@@ -66,12 +65,6 @@ export default function Home() {
 
   return (
     <div>
-      <Head>
-        <title>账目 React</title>
-        <meta name="description" content="账目 React" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
       <main>
         <div className={classes.root}>
           <AppBar position="static">
@@ -114,8 +107,6 @@ export default function Home() {
           </TabPanel>
         </div>
       </main>
-
-      <footer></footer>
     </div>
   );
 }

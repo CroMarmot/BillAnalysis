@@ -6,7 +6,7 @@
 
 # 准备
 
-基于 flask + echarts + sqlite3 + Reactjs(Next.js)
+基于 flask + echarts + sqlite3 + Reactjs
 
 `pip install -r requirement.txt`
 
@@ -32,8 +32,8 @@ python3 alipay2json alipay_record_20210630_1612_1.csv alipay_record_all.db
 front_end
 
 ```
-npm i
-npm run dev
+yarn
+yarn start
 ```
 
 # 当前功能
@@ -53,11 +53,17 @@ npm run dev
 
 ## Version
 
+* 0.2.x 弃用Next
+
+Next 不使用SSR较复杂，有些三方库SSR支持也复杂，本身也不需要SSR，迁移
+
 * 0.1.x 迁移到React
 
-启用 Next.js 代码迁移到React 中
+启用 create react app 代码迁移到React 中
 
 原生js向reactjs tsx改动，关联关系和用户操作状态记录
+
+使用Material-UI
 
 * 0.0.x 基本功能实现
 

@@ -30,35 +30,42 @@ const getInfo = ({
 }) => {
   return fetch(api_all)
     .then((res) => res.json())
-    .then((data) => {
-      // 基于准备好的dom，初始化echarts实例
-      const myChart = echarts.init(echarts_div);
-      // 使用刚指定的配置项和数据显示图表。
-      myChart.setOption({
-        title: {
-          text: echarts_title,
-        },
-        tooltip: {},
-        legend: {
-          data: ["出账"],
-        },
-        xAxis: {
-          data: Object.keys(data),
-        },
-        yAxis: {},
-        series: [
-          {
-            name: "出账",
-            type: "bar",
-            data: Object.values(data).map((item) => item.out_cnt / 100),
+    .then(
+      (data: {
+        [key: string]: {
+          in_cnt: number;
+          out_cnt: number;
+        };
+      }) => {
+        // 基于准备好的dom，初始化echarts实例
+        const myChart = echarts.init(echarts_div);
+        // 使用刚指定的配置项和数据显示图表。
+        myChart.setOption({
+          title: {
+            text: echarts_title,
           },
-        ],
-      });
+          tooltip: {},
+          legend: {
+            data: ["出账"],
+          },
+          xAxis: {
+            data: Object.keys(data),
+          },
+          yAxis: {},
+          series: [
+            {
+              name: "出账",
+              type: "bar",
+              data: Object.values(data).map((item) => item.out_cnt / 100),
+            },
+          ],
+        });
 
-      myChart.on("click", ({ dataIndex }) => {
-        set_query_month(Object.keys(data)[dataIndex]);
-      });
-    });
+        myChart.on("click", ({ dataIndex }: { dataIndex: number }) => {
+          set_query_month(Object.keys(data)[dataIndex]);
+        });
+      }
+    );
 };
 
 const CommonRecord = ({
@@ -104,14 +111,14 @@ const CommonRecord = ({
     })
       .then((res) => res.json())
       .then((r) => {
-        if (r.status == 200) {
+        if (r.status === 200) {
           updateFn();
         }
       });
   };
 
   const set_sort = (col: number) => {
-    if (col == sort_col) {
+    if (col === sort_col) {
       set_sort_order((order) => -1 * order);
     } else {
       set_sort_col(col);
@@ -206,7 +213,7 @@ const CommonRecord = ({
   }, [refresh]);
 
   useEffect(() => {
-    if (query_month == "") {
+    if (query_month === "") {
       return;
     }
     fetch(api_query, {
