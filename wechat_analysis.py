@@ -2,6 +2,7 @@ import csv
 import os
 import json
 import sqlite3
+import logging
 from datetime import datetime
 
 
@@ -66,6 +67,16 @@ class WechatAnalysis:
         # ¥14.00
         return row[5][1:]
 
+    # check if it is Wechat
+    @staticmethod
+    def csvType(file_path):
+        with open(file_path) as csvfile:
+            spamreader = csv.reader(csvfile)
+            for row in spamreader:
+                # first line
+                return "微信" in row[0]
+        return False
+
     def row2api(self, row):
         return {
             "csvType": Wechat,
@@ -87,6 +98,9 @@ class WechatAnalysis:
         return jsonArr
 
     def csv2mem(self, file_path):
+        if not WechatAnalysis.csvType(file_path):
+            logging.error("Not a Wechat csv or encode error:", file_path)
+            return
         self.data_mem = []
         with open(file_path) as csvfile:
             spamreader = csv.reader(csvfile)

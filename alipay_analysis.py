@@ -2,6 +2,7 @@ import csv
 import os
 import json
 import sqlite3
+import logging
 from datetime import datetime
 
 
@@ -52,6 +53,16 @@ class AlipayAnalysis:
 
         self.csv2mem(file_path)
 
+    # check if it is Alipay
+    @staticmethod
+    def csvType(file_path):
+        with open(file_path) as csvfile:
+            spamreader = csv.reader(csvfile)
+            for row in spamreader:
+                # first line
+                return row[0].startswith("支付宝")
+        return False
+
     def row2api(self, row):
         return {
             "csvType": Alipay,
@@ -73,6 +84,9 @@ class AlipayAnalysis:
         return jsonArr
 
     def csv2mem(self, file_path):
+        if not AlipayAnalysis.csvType(file_path):
+            logging.error("Not a Alipay csv or encode error:", file_path)
+            return
         self.data_mem = []
         with open(file_path) as csvfile:
             spamreader = csv.reader(csvfile)

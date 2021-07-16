@@ -1,4 +1,4 @@
-from wechat_analysis import WechatAnalysisGroup
+from wechat_analysis import WechatAnalysis, WechatAnalysisGroup
 from flask.sessions import NullSession
 from flask import Flask, render_template, request
 from flask_cors import CORS
@@ -9,7 +9,7 @@ import json
 import sqlite3
 from datetime import datetime
 
-from alipay_analysis import AlipayAnalysisGroup, Alipay
+from alipay_analysis import AlipayAnalysis, AlipayAnalysisGroup, Alipay
 from wechat_analysis import WechatAnalysisGroup, Wechat
 
 # TODO use logging
@@ -114,10 +114,19 @@ def api_upload():
         # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
         # TODO safe filename
         # TODO support any encode
+        print(csvType)
         if csvType == fileTypes["Alipay"]:
             AAG.add_file(f.filename, upload_path)
         elif csvType == fileTypes["Wechat"]:
             WAG.add_file(f.filename, upload_path)
+        elif csvType == "Auto":
+            if AlipayAnalysis.csvType(upload_path):
+                AAG.add_file(f.filename, upload_path)
+            elif WechatAnalysis.csvType(upload_path):
+                WAG.add_file(f.filename, upload_path)
+            else:
+                print(csvType)
+                return json.dumps({"not ok": 418}, ensure_ascii=False), 418
         else:
             print(csvType)
             return json.dumps({"not ok": 418}, ensure_ascii=False), 418
