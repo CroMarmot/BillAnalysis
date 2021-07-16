@@ -1,5 +1,5 @@
+from wechat_analysis import WechatAnalysisGroup
 from flask.sessions import NullSession
-from alipay_analysis import AlipayAnalysis, AlipayAnalysisGroup, Alipay
 from flask import Flask, render_template, request
 from flask_cors import CORS
 import argparse
@@ -9,6 +9,9 @@ import json
 import sqlite3
 from datetime import datetime
 
+from alipay_analysis import AlipayAnalysisGroup, Alipay
+from wechat_analysis import WechatAnalysisGroup, Wechat
+
 # TODO use logging
 
 app = Flask(__name__)
@@ -17,14 +20,15 @@ CORS(app)
 
 fileTypes = {
     "Alipay": Alipay,
-    "Tencent": "Tencent"
+    "Wechat": Wechat
 }
 
 AAG = None
+WAG = None
 
 
 def getFilePath():
-    parser = argparse.ArgumentParser(description='处理Alipay的交易记录')
+    parser = argparse.ArgumentParser(description='处理Alipay/Wechat的交易记录')
     parser.add_argument('db', help='db file path')
     args = parser.parse_args()
     return args.db
@@ -44,14 +48,23 @@ def api_ignore_no():
 
 @app.route("/api/month")
 def api_month():
-    month = AAG.get_month()
+    month = {}
+    # TODO merge instead of replace
+    aag_month = AAG.get_month()
+    for k in aag_month:
+        month[k] = aag_month[k]
+
+    wag_month = WAG.get_month()
+    for k in wag_month:
+        month[k] = wag_month[k]
+
     return json.dumps(month, ensure_ascii=False)
 
 
 @app.route("/api/month_query", methods=['POST'])
 def api_month_query():
     queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.month_query(queryData)
+    result = AAG.month_query(queryData) + WAG.month_query(queryData)
     return json.dumps(result, ensure_ascii=False)
 
 
@@ -81,6 +94,8 @@ def file_list():
 
     return json.dumps(result, ensure_ascii=False)
 
+# TODO 根据csv内容 自动监测类型
+
 
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
@@ -92,11 +107,13 @@ def api_upload():
         f.save(upload_path)
         print(csvType, upload_path)
 
+        # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
+        # TODO safe filename
+        # TODO support any encode
         if csvType == fileTypes["Alipay"]:
-            # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
-            # TODO safe filename
-            # TODO support any encode
             AAG.add_file(f.filename, upload_path)
+        elif csvType == fileTypes["Wechat"]:
+            WAG.add_file(f.filename, upload_path)
         else:
             print(csvType)
     else:
@@ -106,9 +123,10 @@ def api_upload():
 
 
 def main():
-    global db_path, AAG
+    global AAG, WAG
     db_path = getFilePath()
     AAG = AlipayAnalysisGroup(db_path)
+    WAG = WechatAnalysisGroup(db_path)
 
     app.run()
 

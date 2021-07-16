@@ -83,6 +83,14 @@ const CommonRecord = ({
   refresh: Object;
   updateFn: Function;
 }) => {
+  interface SpendingRecord {
+    no: string; // 交易编号
+    opposite: string; // 对方
+    amount: string; // 金额
+    time: string; // 交易时间
+    status: string; // 交易状态
+    refund: string; // 退款
+  }
   const styles = {
     canvas: {
       width: 800,
@@ -98,7 +106,7 @@ const CommonRecord = ({
   const [sort_order, set_sort_order] = useState(1);
   const [query_month, set_query_month] = useState("");
 
-  const ignoreItem = (element: string[]) => {
+  const ignoreItem = (element: SpendingRecord) => {
     return fetch(api_ignore_no, {
       method: "POST",
       headers: {
@@ -106,7 +114,8 @@ const CommonRecord = ({
       },
       body: JSON.stringify({
         op: "append",
-        no: element[0],
+        // TODO alipay wechat
+        no: element.no,
       }),
     })
       .then((res) => res.json())
@@ -127,21 +136,23 @@ const CommonRecord = ({
   };
 
   const material_table = () => {
-    const table_data = detail_state;
+    const table_data: SpendingRecord[] = detail_state;
     // 商家
     if (sort_col === 1) {
       table_data.sort(
-        (item_a, item_b) => sort_order * (item_a[7] > item_b[7] ? 1 : -1)
+        (item_a, item_b) =>
+          sort_order * (item_a.opposite > item_b.opposite ? 1 : -1)
       );
     } else if (sort_col === 2) {
       // 金额
       table_data.sort(
-        (item_a, item_b) => sort_order * (Number(item_b[9]) - Number(item_a[9]))
+        (item_a, item_b) =>
+          sort_order * (Number(item_b.amount) - Number(item_a.amount))
       );
     } else if (sort_col === 3) {
       // 交易时间
       table_data.sort(
-        (item_a, item_b) => sort_order * (item_a[2] > item_b[2] ? 1 : -1)
+        (item_a, item_b) => sort_order * (item_a.time > item_b.time ? 1 : -1)
       );
     }
 
@@ -171,8 +182,8 @@ const CommonRecord = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {table_data.map((element: string[]) => (
-                <TableRow key={element[0]}>
+              {table_data.map((element: SpendingRecord) => (
+                <TableRow key={element.no}>
                   <TableCell>
                     <Button
                       onClick={() => ignoreItem(element)}
@@ -182,14 +193,14 @@ const CommonRecord = ({
                       Ignore
                     </Button>
                   </TableCell>
-                  <TableCell>{element[7]}</TableCell>
-                  <TableCell align="right">{element[9]}</TableCell>
-                  <TableCell>{element[2].substr(5)}</TableCell>
+                  <TableCell>{element.opposite}</TableCell>
+                  <TableCell align="right">{element.amount}</TableCell>
+                  <TableCell>{element.time?.substr(5)}</TableCell>
                   <TableCell align="right">
-                    {element[11] !== "交易成功" ? `${element[11]}` : ""}
+                    {element.status !== "交易成功" ? `${element.status}` : ""}
                   </TableCell>
                   <TableCell align="right">
-                    {Number(element[13]) !== 0 ? `${element[13]}` : ""}
+                    {Number(element.refund) !== 0 ? `${element.refund}` : ""}
                   </TableCell>
                 </TableRow>
               ))}

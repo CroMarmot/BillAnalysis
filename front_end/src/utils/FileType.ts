@@ -1,6 +1,6 @@
 const csvType:{[key:string]:string} = {
     Alipay:"Alipay",
-    Tencent:"Tencent"
+    Wechat:"Wechat"
 };
 
 export default csvType;

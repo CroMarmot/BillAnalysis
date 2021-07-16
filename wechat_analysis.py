@@ -5,29 +5,24 @@ import sqlite3
 from datetime import datetime
 
 
-recordLen = 17
-TABLE_IGNORE = "alipay_ignore_table"
+recordLen = 11
+TABLE_IGNORE = "wechat_ignore_table"
 
 """
-"交易号": "tradeNo",  # 0
-"商家订单号": "outNo",  # 1
-"交易创建时间": "createTime",  # 2
-"付款时间": "payTime",  # 3
-"最近修改时间": "modifyTime",  # 4
-"交易来源地": "source",  # 5
-"类型": "tradeType",  # 6
-"交易对方": "opposite",  # 7
-"商品名称": "productName",  # 8
-"金额（元）": "amount",  # 9
-"收/支": "in_out",  # 10
-"交易状态": "trade_status",  # 11
-"服务费（元）": "serviceFee",  # 12
-"成功退款（元）": "successfulRefund",  # 13
-"备注": "remark",  # 14
-"资金状态": "fundState",  # 15
+交易时间 0
+交易类型 1
+交易对方 2
+商品 3
+收/支 4
+金额(元) 5
+支付方式 6
+当前状态 7
+交易单号 8
+商户单号 9
+备注 10
 """
 
-Alipay = 'Alipay'
+Wechat = 'Wechat'
 
 
 class IgnoreSet:
@@ -45,21 +40,40 @@ class IgnoreSet:
             self.ignore_set.add(row[0])
 
 
-class AlipayAnalysis:
+class WechatAnalysis:
     def __init__(self, file_path, ignore_set) -> None:
         self.data_mem = []
         self.ignore_set = ignore_set
 
         self.csv2mem(file_path)
 
+    def in_out_check(self, row, compare_txt):
+        return row[4] == compare_txt
+
+    def is_spending(self, row):
+        return self.in_out_check(row, '支出')
+
+    def get_no(self, row):
+        return row[8]
+
+    def get_time_str(self, row):
+        return row[0]
+
+    def get_time(self, row):
+        return datetime.strptime(self.get_time_str(row), "%Y-%m-%d %H:%M:%S")
+
+    def get_amount(self, row):
+        # ¥14.00
+        return row[5][1:]
+
     def row2api(self, row):
         return {
-            "no": row[0],
-            "opposite": row[7],
-            "amount": row[9],
-            "time": row[2],
-            "status": row[11],
-            "refund": row[13],
+            "no": self.get_no(row),
+            "opposite": row[2],
+            "amount": self.get_amount(row),
+            "time": self.get_time_str(row),
+            "status": '',  # ??
+            "refund": '',  # ??
         }
 
     def full_list(self):
@@ -80,23 +94,20 @@ class AlipayAnalysis:
                 if len(row) != recordLen:
                     continue
                 if head == None:
-                    # 最后一个是空格
-                    head = [x.strip().strip('\t') for x in row[:-1]]
+                    head = [x.strip().strip('\t') for x in row]
                     continue
-                self.data_mem.append([x.strip().strip("\t") for x in row[:-1]])
+                self.data_mem.append([x.strip().strip("\t") for x in row])
         self.data_mem.reverse()
 
     def month(self):
         month = {}
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-            no = row[0]
-            amount = row[9]
-            refund = row[13]
-            in_out = row[10]
+            dateobj = self.get_time(row)
+            amount = self.get_amount(row)
+            refund = 0  # TODO ? wechat support ??
             month_str = "{0:%Y-%m}".format(dateobj)
-            if no in self.ignore_set:
+            if self.get_no(row) in self.ignore_set:
                 continue
 
             if month_str not in month:
@@ -104,32 +115,31 @@ class AlipayAnalysis:
                     "in_cnt": 0,
                     "out_cnt": 0
                 }
-            if in_out == '支出':
+            if self.is_spending(row):
                 month[month_str]["out_cnt"] += round(100 *
                                                      (float(amount) - float(refund)))
-            else:  # 收入
+            else:  # 收入 或 其它
                 month[month_str]["in_cnt"] += round(100*float(amount))
         return month
 
     def month_query(self, queryData):
         # 默认查询支出
+        # TODO 不要修改引用 ? 不同数据源的整合
         if "in_out" not in queryData:
             queryData["in_out"] = "支出"
 
         month_result = []
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-            no = row[0]
-            in_out = row[10]
+            dateobj = self.get_time(row)
             month_str = "{0:%Y-%m}".format(dateobj)
-            if no in self.ignore_set:
+            if self.get_no(row) in self.ignore_set:
                 continue
 
             if month_str != queryData["key"]:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if not self.in_out_check(row, queryData["in_out"]):
                 continue
 
             month_result.append(self.row2api(row))
@@ -139,13 +149,11 @@ class AlipayAnalysis:
         week = {}
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-            no = row[0]
-            amount = row[9]
-            refund = row[13]
-            in_out = row[10]
+            dateobj = self.get_time(row)
+            amount = self.get_amount(row)
+            refund = 0  # TODO wechat support ?
             week_str = "{0:%Y-%W}".format(dateobj)
-            if no in self.ignore_set:
+            if self.get_no(row) in self.ignore_set:
                 continue
 
             if week_str not in week:
@@ -153,7 +161,7 @@ class AlipayAnalysis:
                     "in_cnt": 0,
                     "out_cnt": 0
                 }
-            if in_out == '支出':
+            if self.is_spending(row):
                 week[week_str]["out_cnt"] += round(100 *
                                                    (float(amount)-float(refund)))
             else:  # 收入
@@ -167,17 +175,15 @@ class AlipayAnalysis:
         week_result = []
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-            no = row[0]
-            in_out = row[10]
+            dateobj = self.get_time(row)
             week_str = "{0:%Y-%W}".format(dateobj)
-            if no in self.ignore_set:
+            if self.get_no(row) in self.ignore_set:
                 continue
 
             if week_str != queryData["key"]:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if not self.in_out_check(row, queryData["in_out"]):
                 continue
 
             week_result.append(row)
@@ -190,13 +196,10 @@ class AlipayAnalysis:
 
         result = []
         for row in self.data_mem:
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
-            no = row[0]
-            in_out = row[10]
-            if no not in self.ignore_set:
+            if self.get_no(row) not in self.ignore_set:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if not self.in_out_check(row, queryData["in_out"]):
                 continue
 
             result.append(row)
@@ -204,31 +207,31 @@ class AlipayAnalysis:
         return result
 
 
-class AlipayAnalysisGroup:
-    alipay_groups = {}
+class WechatAnalysisGroup:
+    wechat_groups = {}
 
     def __init__(self, db_path) -> None:
         self.db_path = db_path
         self.ig_set = IgnoreSet(db_path)
 
     def add_file(self, filename, upload_path):
-        self.alipay_groups[filename] = AlipayAnalysis(
+        self.wechat_groups[filename] = WechatAnalysis(
             upload_path, self.ig_set.ignore_set)
 
     def get_groups(self):
         result = []
-        for k in self.alipay_groups:
+        for k in self.wechat_groups:
             result.append({
                 "name": k,
-                "type": Alipay
+                "type": Wechat
             })
         return result
 
     def get_ignore_list(self, queryData):
         result = []
-        for key in self.alipay_groups:
-            alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.ignore_list(queryData)
+        for key in self.wechat_groups:
+            wechat_ins = self.wechat_groups[key]
+            ins_result = wechat_ins.ignore_list(queryData)
             # TODO merge instead of append
             result += ins_result
 
@@ -236,9 +239,9 @@ class AlipayAnalysisGroup:
 
     def get_week(self):
         week = {}
-        for key in self.alipay_groups:
-            alipay_ins = self.alipay_groups[key]
-            ins_week = alipay_ins.week()
+        for key in self.wechat_groups:
+            wechat_ins = self.wechat_groups[key]
+            ins_week = wechat_ins.week()
             # TODO merge instead of replace
             for k in ins_week:
                 week[k] = ins_week[k]
@@ -248,9 +251,9 @@ class AlipayAnalysisGroup:
     def week_query(self, queryData):
         result = []
 
-        for key in self.alipay_groups:
-            alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.week_query(queryData)
+        for key in self.wechat_groups:
+            wechat_ins = self.wechat_groups[key]
+            ins_result = wechat_ins.week_query(queryData)
             # TODO merge instead of replace
             result += ins_result
 
@@ -258,9 +261,9 @@ class AlipayAnalysisGroup:
 
     def get_month(self):
         month = {}
-        for key in self.alipay_groups:
-            alipay_ins = self.alipay_groups[key]
-            ins_month = alipay_ins.month()
+        for key in self.wechat_groups:
+            wechat_ins = self.wechat_groups[key]
+            ins_month = wechat_ins.month()
             # TODO merge instead of replace
             for k in ins_month:
                 month[k] = ins_month[k]
@@ -270,9 +273,9 @@ class AlipayAnalysisGroup:
     def month_query(self, queryData):
         result = []
 
-        for key in self.alipay_groups:
-            alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.month_query(queryData)
+        for key in self.wechat_groups:
+            wechat_ins = self.wechat_groups[key]
+            ins_result = wechat_ins.month_query(queryData)
             # TODO merge instead of replace
             result += ins_result
         return result
