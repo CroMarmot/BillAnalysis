@@ -27,6 +27,8 @@ TABLE_IGNORE = "alipay_ignore_table"
 "资金状态": "fundState",  # 15
 """
 
+Alipay = 'Alipay'
+
 
 class IgnoreSet:
     def __init__(self, db_path) -> None:
@@ -193,7 +195,102 @@ class AlipayAnalysis:
 
 
 class AlipayAnalysisGroup:
-    def __init__(self) -> None:
-        pass
+    alipay_groups = {}
 
-    pass
+    def __init__(self, db_path) -> None:
+        self.db_path = db_path
+        self.ig_set = IgnoreSet(db_path)
+
+    def add_file(self, filename, upload_path):
+        self.alipay_groups[filename] = AlipayAnalysis(
+            upload_path, self.ig_set.ignore_set)
+
+    def get_groups(self):
+        result = []
+        for k in self.alipay_groups:
+            result.append({
+                "name": k,
+                "type": Alipay
+            })
+        return result
+
+    def get_ignore_list(self, queryData):
+        result = []
+        for key in self.alipay_groups:
+            alipay_ins = self.alipay_groups[key]
+            ins_result = alipay_ins.ignore_list(queryData)
+            # TODO merge instead of append
+            result += ins_result
+
+        return result
+
+    def get_week(self):
+        week = {}
+        for key in self.alipay_groups:
+            alipay_ins = self.alipay_groups[key]
+            ins_week = alipay_ins.week()
+            # TODO merge instead of replace
+            for k in ins_week:
+                week[k] = ins_week[k]
+
+        return week
+
+    def week_query(self, queryData):
+        result = []
+
+        for key in self.alipay_groups:
+            alipay_ins = self.alipay_groups[key]
+            ins_result = alipay_ins.week_query(queryData)
+            # TODO merge instead of replace
+            result += ins_result
+
+        return result
+
+    def get_month(self):
+        month = {}
+        for key in self.alipay_groups:
+            alipay_ins = self.alipay_groups[key]
+            ins_month = alipay_ins.month()
+            # TODO merge instead of replace
+            for k in ins_month:
+                month[k] = ins_month[k]
+
+        return month
+
+    def month_query(self, queryData):
+        result = []
+
+        for key in self.alipay_groups:
+            alipay_ins = self.alipay_groups[key]
+            ins_result = alipay_ins.month_query(queryData)
+            # TODO merge instead of replace
+            result += ins_result
+        return result
+
+    def ignore_no(self, queryData):
+        ignore_set = self.ig_set.ignore_set
+        op = queryData["op"]
+        if op == 'append':
+            con = sqlite3.connect(self.db_path)
+            cur = con.cursor()
+            ignore_set.add(queryData["no"])
+            # TODO duplicate insert
+            cur.execute(
+                f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
+            con.commit()
+            con.close()
+        elif op == "remove":
+            if queryData["no"] not in ignore_set:
+                return False
+            con = sqlite3.connect(self.db_path)
+            cur = con.cursor()
+            ignore_set.remove(queryData["no"])
+            # TODO duplicate insert
+            cur.execute(
+                f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
+
+            con.commit()
+            con.close()
+        else:
+            return False
+        return True

@@ -82,7 +82,9 @@ const DataMancsvTyper = ({
         inputProps={{ "aria-label": "Without label" }}
       >
         {Object.keys(csvTypes).map((key) => (
-          <MenuItem value={key}>{csvTypes[key]}</MenuItem>
+          <MenuItem key={key} value={key}>
+            {csvTypes[key]}
+          </MenuItem>
         ))}
       </Select>
       <Button onClick={uploadCsv}>Upload</Button>
