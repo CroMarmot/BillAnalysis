@@ -59,7 +59,7 @@ const IgnoreList = ({
     return () => {
       // cleanup
     };
-  }, [refresh]);
+  }, [refresh, url_prefix]);
 
   return (
     <>

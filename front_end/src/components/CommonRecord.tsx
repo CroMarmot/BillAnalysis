@@ -157,13 +157,13 @@ const CommonRecord = ({
             <TableHead>
               <TableRow>
                 <TableCell></TableCell>
-                <TableCell align="right">
+                <TableCell>
                   <button onClick={() => set_sort(1)}>商家</button>
                 </TableCell>
                 <TableCell align="right">
                   <button onClick={() => set_sort(2)}>金额</button>
                 </TableCell>
-                <TableCell align="right">
+                <TableCell>
                   <button onClick={() => set_sort(3)}>交易时间</button>
                 </TableCell>
                 <TableCell align="right">状态</TableCell>
@@ -173,7 +173,7 @@ const CommonRecord = ({
             <TableBody>
               {table_data.map((element: string[]) => (
                 <TableRow key={element[0]}>
-                  <TableCell component="th" scope="row">
+                  <TableCell>
                     <Button
                       onClick={() => ignoreItem(element)}
                       variant="contained"
@@ -182,9 +182,9 @@ const CommonRecord = ({
                       Ignore
                     </Button>
                   </TableCell>
-                  <TableCell align="right">{element[7]}</TableCell>
+                  <TableCell>{element[7]}</TableCell>
                   <TableCell align="right">{element[9]}</TableCell>
-                  <TableCell align="right">{element[2].substr(5)}</TableCell>
+                  <TableCell>{element[2].substr(5)}</TableCell>
                   <TableCell align="right">
                     {element[11] !== "交易成功" ? `${element[11]}` : ""}
                   </TableCell>
@@ -210,7 +210,7 @@ const CommonRecord = ({
     return () => {
       // cleanup
     };
-  }, [refresh]);
+  }, [refresh, api_all, echarts_title]);
 
   useEffect(() => {
     if (query_month === "") {
@@ -229,7 +229,7 @@ const CommonRecord = ({
       .then((query_response) => {
         set_detail_state(query_response);
       });
-  }, [refresh, query_month]);
+  }, [refresh, query_month, api_query]);
 
   return (
     <>

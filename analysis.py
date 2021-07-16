@@ -1,5 +1,5 @@
 from flask.sessions import NullSession
-from alipay_analysis import AlipayAnalysis, IgnoreSet, TABLE_IGNORE
+from alipay_analysis import AlipayAnalysis, AlipayAnalysisGroup, IgnoreSet, TABLE_IGNORE
 from flask import Flask, render_template, request
 from flask_cors import CORS
 import argparse
@@ -9,6 +9,7 @@ import json
 import sqlite3
 from datetime import datetime
 
+# TODO use logging
 
 app = Flask(__name__)
 # 不用cors的话 可以用nginx
@@ -16,6 +17,16 @@ CORS(app)
 
 alipay_groups = {}
 ig_set = None
+Alipay = "Alipay"
+
+
+tencent_groups = {}
+
+
+fileTypes = {
+    "Alipay": "Alipay",
+    "Tencent": "Tencent"
+}
 
 
 def getFilePath():
@@ -158,20 +169,38 @@ def api_ignore_list():
     return json.dumps(result, ensure_ascii=False)
 
 
-@app.route('/upload', methods=['POST'])
-def upload():
+@app.route('/api/file_list')
+def file_list():
+    result = []
+    global alipay_groups
+    for k in alipay_groups:
+        result.append({
+            "name": k,
+            "type": Alipay
+        })
+
+    return json.dumps(result, ensure_ascii=False)
+
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
     global alipay_groups
     if request.method == 'POST':
         f = request.files['file']
-        # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
-        # TODO safe filename
+        csvType = request.form['csvType']
         upload_path = os.path.join(os.path.dirname(
             __file__), 'tmp/uploads', f.filename)
         f.save(upload_path)
-        print(upload_path)
-        # TODO support any encode
-        alipay_groups[upload_path] = AlipayAnalysis(
-            upload_path, ig_set.ignore_set)
+        print(csvType, upload_path)
+
+        if csvType == fileTypes["Alipay"]:
+            # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
+            # TODO safe filename
+            # TODO support any encode
+            alipay_groups[f.filename] = AlipayAnalysis(
+                upload_path, ig_set.ignore_set)
+        else:
+            print(csvType)
 
     return json.dumps({"ok": "?"}, ensure_ascii=False)
 

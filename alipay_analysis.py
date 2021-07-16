@@ -9,25 +9,22 @@ recordLen = 17
 TABLE_IGNORE = "alipay_ignore_table"
 
 """
-{
-    "交易号": "tradeNo",  # 0
-    "商家订单号": "outNo",  # 1
-    "交易创建时间": "createTime",  # 2
-    "付款时间": "payTime",  # 3
-    "最近修改时间": "modifyTime",  # 4
-    "交易来源地": "source",  # 5
-    "类型": "tradeType",  # 6
-    "交易对方": "opposite",  # 7
-    "商品名称": "productName",  # 8
-    "金额（元）": "amount",  # 9
-    "收/支": "in_out",  # 10
-    "交易状态": "trade_status",  # 11
-    "服务费（元）": "serviceFee",  # 12
-    "成功退款（元）": "successfulRefund",  # 13
-    "备注": "remark",  # 14
-    "资金状态": "fundState",  # 15
-}
-
+"交易号": "tradeNo",  # 0
+"商家订单号": "outNo",  # 1
+"交易创建时间": "createTime",  # 2
+"付款时间": "payTime",  # 3
+"最近修改时间": "modifyTime",  # 4
+"交易来源地": "source",  # 5
+"类型": "tradeType",  # 6
+"交易对方": "opposite",  # 7
+"商品名称": "productName",  # 8
+"金额（元）": "amount",  # 9
+"收/支": "in_out",  # 10
+"交易状态": "trade_status",  # 11
+"服务费（元）": "serviceFee",  # 12
+"成功退款（元）": "successfulRefund",  # 13
+"备注": "remark",  # 14
+"资金状态": "fundState",  # 15
 """
 
 
@@ -193,3 +190,10 @@ class AlipayAnalysis:
             result.append(row)
 
         return result
+
+
+class AlipayAnalysisGroup:
+    def __init__(self) -> None:
+        pass
+
+    pass

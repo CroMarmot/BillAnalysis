@@ -1,26 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 
-const getIgnoreList = ({
-  url_prefix,
-  set_ignore_list,
-}: {
-  url_prefix: string;
-  set_ignore_list: Function;
-}) => {
-  fetch(`${url_prefix}/api/ignore_list`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({}),
-  })
-    .then((res) => res.json())
-    .then((r: string[]) => {
-      set_ignore_list(r);
-    });
-};
+import { makeStyles } from "@material-ui/core/styles";
+import Table from "@material-ui/core/Table";
+import TableBody from "@material-ui/core/TableBody";
+import TableCell from "@material-ui/core/TableCell";
+import TableContainer from "@material-ui/core/TableContainer";
+import TableHead from "@material-ui/core/TableHead";
+import TableRow from "@material-ui/core/TableRow";
+import MenuItem from "@material-ui/core/MenuItem";
+import Button from "@material-ui/core/Button";
+import Select from "@material-ui/core/Select";
+import Paper from "@material-ui/core/Paper";
 
-const DataManager = ({
+import csvTypes from "../utils/FileType";
+
+const useStyles = makeStyles({
+  table: {
+    minWidth: 650,
+  },
+});
+
+const DataMancsvTyper = ({
   url_prefix,
   refresh,
   updateFn,
@@ -29,37 +29,24 @@ const DataManager = ({
   refresh: Object;
   updateFn: Function;
 }) => {
-  const [ignore_list, set_ignore_list] = useState([]);
   const inputRef = useRef() as React.MutableRefObject<HTMLInputElement>;
+  const [data_list, set_data_list] = useState([]);
+  const [csvType, setCsvType] = useState(Object.keys(csvTypes)[0]);
+  const classes = useStyles();
 
-  const ignore_item = (element: string[]) => {
-    fetch(`${url_prefix}/api/ignore_no`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        op: "remove",
-        no: element[0],
-      }),
-    })
-      .then((res) => res.json())
-      .then((r) => {
-        if (r.status === 200) {
-          updateFn();
-        }
-      });
+  const handleChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    setCsvType(event.target.value as string);
   };
 
   useEffect(() => {
-    getIgnoreList({
-      url_prefix,
-      set_ignore_list,
-    });
+    fetch(`${url_prefix}/api/file_list`)
+      .then((data) => data.json())
+      .then((r) => set_data_list(r));
+
     return () => {
       // cleanup
     };
-  }, [refresh]);
+  }, [refresh, url_prefix]);
 
   const uploadCsv = () => {
     if (
@@ -71,14 +58,15 @@ const DataManager = ({
     }
     const formData = new FormData();
     formData.append("file", inputRef.current.files[0]);
+    formData.append("csvType", csvType);
 
-    fetch(`${url_prefix}/upload`, {
+    fetch(`${url_prefix}/api/upload`, {
       method: "POST",
       body: formData,
     })
       .then((response) => response.json())
-      .then((result) => {
-        console.log("Success:", result);
+      .then(() => {
+        updateFn();
       })
       .catch((error) => {
         console.error("Error:", error);
@@ -88,9 +76,44 @@ const DataManager = ({
   return (
     <>
       <input type="file" ref={inputRef} />
-      <button onClick={uploadCsv}>Upload</button>
+      <Select
+        value={csvType}
+        onChange={handleChange}
+        inputProps={{ "aria-label": "Without label" }}
+      >
+        {Object.keys(csvTypes).map((key) => (
+          <MenuItem value={key}>{csvTypes[key]}</MenuItem>
+        ))}
+      </Select>
+      <Button onClick={uploadCsv}>Upload</Button>
+      <div>
+        <TableContainer component={Paper}>
+          <Table
+            className={classes.table}
+            size="small"
+            aria-label="simple table"
+          >
+            <TableHead>
+              <TableRow>
+                <TableCell>名称</TableCell>
+                <TableCell align="right">类型</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data_list.map((element: { name: string; type: string }) => (
+                <TableRow key={element.name}>
+                  <TableCell component="th" scope="row">
+                    {element.name}
+                  </TableCell>
+                  <TableCell align="right">{element.type}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
     </>
   );
 };
 
-export default DataManager;
+export default DataMancsvTyper;
