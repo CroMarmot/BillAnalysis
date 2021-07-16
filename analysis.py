@@ -55,17 +55,11 @@ def api_ignore_no():
 
 @app.route("/api/month")
 def api_month():
-    month = {}
-    # TODO merge instead of replace
-    aag_month = AAG.get_month()
-    for k in aag_month:
-        month[k] = aag_month[k]
-
-    wag_month = WAG.get_month()
-    for k in wag_month:
-        month[k] = wag_month[k]
-
-    return json.dumps(month, ensure_ascii=False)
+    result = {
+        Wechat: WAG.get_month(),
+        Alipay: AAG.get_month(),
+    }
+    return json.dumps(result, ensure_ascii=False)
 
 
 @app.route("/api/month_query", methods=['POST'])
@@ -77,14 +71,10 @@ def api_month_query():
 
 @app.route("/api/week")
 def api_week():
-    result = {}
-    aag_week = AAG.get_week()
-    for k in aag_week:
-        result[k] = aag_week[k]
-
-    wag_week = WAG.get_week()
-    for k in wag_week:
-        result[k] = wag_week[k]
+    result = {
+        Wechat: WAG.get_week(),
+        Alipay: AAG.get_week(),
+    }
 
     return json.dumps(result, ensure_ascii=False)
 

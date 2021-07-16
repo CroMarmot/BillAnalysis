@@ -12,21 +12,21 @@
 
 从支付宝官方下载csv数据,
 
-编码从gbk转换为utf8
+编码从gbk转换为utf8(支付宝账单需要)
 
 `./gbk2utf8.sh <your csv>`
 
 
 # 使用
 
-`python3 alipay2json.py <your db path>`
+`python3 analysis.py <your db path>`
 
 db 填写路径即可，没有的话会自动生成
 
 server使用示例
 
 ```
-python3 alipay2json alipay_record_all.db
+python3 analysis.py record.db
 ```
 
 front_end
@@ -48,6 +48,8 @@ yarn start
 
 标记忽略，查看忽略列表，撤销标记
 
+已支持 支付宝账单 和 微信账单
+
 # TODO
 
 - [ ] 读取备注，增加备注
@@ -59,7 +61,7 @@ yarn start
 - [ ] 使用RxJs?
 - [ ] 总额均值
 - [ ] 自动识别账单类型
-- [ ] 解决 Alipay / Wechat 同时有的冲突
+- [ ] 解决 Alipay/Wechat 内部的 合并 覆盖(目前用户保证账单，两份月周份无重复)
 
 ## Version
 

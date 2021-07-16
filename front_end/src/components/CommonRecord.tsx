@@ -34,36 +34,64 @@ const getInfo = ({
     .then(
       (data: {
         [key: string]: {
-          in_cnt: number;
-          out_cnt: number;
+          [key: string]: {
+            in_cnt: number;
+            out_cnt: number;
+          };
         };
       }) => {
         // 基于准备好的dom，初始化echarts实例
         const myChart = echarts.init(echarts_div);
+        // TODO 月份对齐
+        const keysSet = new Set<string>();
+        Object.entries(data).forEach(([csvType, csvData]) => {
+          Object.keys(csvData).forEach((key) => {
+            keysSet.add(key);
+          });
+        });
+        const keysArr: string[] = Array.from(keysSet);
+        keysArr.sort();
+
+        console.warn(data);
         // 使用刚指定的配置项和数据显示图表。
         myChart.setOption({
           title: {
             text: echarts_title,
           },
           tooltip: {},
-          legend: {
-            data: ["出账"],
-          },
           xAxis: {
-            data: Object.keys(data),
+            data: keysArr,
           },
           yAxis: {},
+          legend: {
+            data: Object.keys(data),
+            left: "10%",
+          },
+          toolbox: {
+            feature: {
+              magicType: {
+                type: ["stack"],
+              },
+            },
+          },
           series: [
             {
-              name: "出账",
+              name: "支付宝",
               type: "bar",
-              data: Object.values(data).map((item) => item.out_cnt / 100),
+              stack: "one",
+              data: keysArr.map((key) => data["Alipay"][key]?.out_cnt / 100),
+            },
+            {
+              name: "微信",
+              type: "bar",
+              stack: "one",
+              data: keysArr.map((key) => data["Wechat"][key]?.out_cnt / 100),
             },
           ],
         });
 
         myChart.on("click", ({ dataIndex }: { dataIndex: number }) => {
-          set_query_month(Object.keys(data)[dataIndex]);
+          set_query_month(keysArr[dataIndex]);
         });
       }
     );
@@ -173,6 +201,7 @@ const CommonRecord = ({
                 </TableCell>
                 <TableCell align="right">状态</TableCell>
                 <TableCell align="right">退款</TableCell>
+                <TableCell>CSV TYPE</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -196,6 +225,7 @@ const CommonRecord = ({
                   <TableCell align="right">
                     {Number(element.refund) !== 0 ? `${element.refund}` : ""}
                   </TableCell>
+                  <TableCell>{element.csvType}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
