@@ -68,6 +68,7 @@ class WechatAnalysis:
 
     def row2api(self, row):
         return {
+            "csvType": Wechat,
             "no": self.get_no(row),
             "opposite": row[2],
             "amount": self.get_amount(row),
@@ -186,7 +187,7 @@ class WechatAnalysis:
             if not self.in_out_check(row, queryData["in_out"]):
                 continue
 
-            week_result.append(row)
+            week_result.append(self.row2api(row))
         return week_result
 
     def ignore_list(self, queryData):
@@ -202,7 +203,7 @@ class WechatAnalysis:
             if not self.in_out_check(row, queryData["in_out"]):
                 continue
 
-            result.append(row)
+            result.append(self.row2api(row))
 
         return result
 

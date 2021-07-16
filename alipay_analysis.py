@@ -54,6 +54,7 @@ class AlipayAnalysis:
 
     def row2api(self, row):
         return {
+            "csvType": Alipay,
             "no": row[0],
             "opposite": row[7],
             "amount": row[9],
@@ -180,7 +181,7 @@ class AlipayAnalysis:
             if in_out != queryData["in_out"]:
                 continue
 
-            week_result.append(row)
+            week_result.append(self.row2api(row))
         return week_result
 
     def ignore_list(self, queryData):
@@ -199,7 +200,7 @@ class AlipayAnalysis:
             if in_out != queryData["in_out"]:
                 continue
 
-            result.append(row)
+            result.append(self.row2api(row))
 
         return result
 

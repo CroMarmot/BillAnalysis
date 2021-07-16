@@ -26,6 +26,9 @@ fileTypes = {
 AAG = None
 WAG = None
 
+# TODO 泛型合并 AAG WAG
+AG = {}
+
 
 def getFilePath():
     parser = argparse.ArgumentParser(description='处理Alipay/Wechat的交易记录')
@@ -37,9 +40,13 @@ def getFilePath():
 @app.route("/api/ignore_no", methods=["POST"])
 def api_ignore_no():
     queryData = json.loads(request.get_data(as_text=True))
+    if queryData['csvType'] == Alipay:
+        ins_result = AAG.ignore_no(queryData)
+    elif queryData['csvType'] == Wechat:
+        ins_result = WAG.ignore_no(queryData)
+    else:
+        return json.dumps({"status": 418}), 418
 
-    ins_result = AAG.ignore_no(queryData)
-    # TODO merge instead of replace
     if not ins_result:
         return json.dumps({"status": 418}), 418
 
@@ -70,27 +77,35 @@ def api_month_query():
 
 @app.route("/api/week")
 def api_week():
-    week = AAG.get_week()
-    return json.dumps(week, ensure_ascii=False)
+    result = {}
+    aag_week = AAG.get_week()
+    for k in aag_week:
+        result[k] = aag_week[k]
+
+    wag_week = WAG.get_week()
+    for k in wag_week:
+        result[k] = wag_week[k]
+
+    return json.dumps(result, ensure_ascii=False)
 
 
 @app.route("/api/week_query", methods=['POST'])
 def api_week_query():
     queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.week_query(queryData)
+    result = AAG.week_query(queryData) + WAG.week_query(queryData)
     return json.dumps(result, ensure_ascii=False)
 
 
 @app.route("/api/ignore_list", methods=["POST"])
 def api_ignore_list():
     queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.get_ignore_list(queryData)
+    result = AAG.get_ignore_list(queryData) + WAG.get_ignore_list(queryData)
     return json.dumps(result, ensure_ascii=False)
 
 
 @app.route('/api/file_list')
 def file_list():
-    result = AAG.get_groups()
+    result = AAG.get_groups() + WAG.get_groups()
 
     return json.dumps(result, ensure_ascii=False)
 
@@ -105,7 +120,6 @@ def api_upload():
         upload_path = os.path.join(os.path.dirname(
             __file__), 'tmp/uploads', f.filename)
         f.save(upload_path)
-        print(csvType, upload_path)
 
         # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
         # TODO safe filename
@@ -116,8 +130,10 @@ def api_upload():
             WAG.add_file(f.filename, upload_path)
         else:
             print(csvType)
+            return json.dumps({"not ok": 418}, ensure_ascii=False), 418
     else:
         print(request.method)
+        return json.dumps({"not ok": 418}, ensure_ascii=False), 418
 
     return json.dumps({"ok": "?"}, ensure_ascii=False)
 

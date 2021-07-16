@@ -10,6 +10,7 @@ import TableContainer from "@material-ui/core/TableContainer";
 import TableHead from "@material-ui/core/TableHead";
 import TableRow from "@material-ui/core/TableRow";
 import Paper from "@material-ui/core/Paper";
+import { SpendingRecord } from "../interfaces/SpendingRecord";
 
 const useStyles = makeStyles({
   table: {
@@ -83,14 +84,6 @@ const CommonRecord = ({
   refresh: Object;
   updateFn: Function;
 }) => {
-  interface SpendingRecord {
-    no: string; // 交易编号
-    opposite: string; // 对方
-    amount: string; // 金额
-    time: string; // 交易时间
-    status: string; // 交易状态
-    refund: string; // 退款
-  }
   const styles = {
     canvas: {
       width: 800,
@@ -115,6 +108,7 @@ const CommonRecord = ({
       body: JSON.stringify({
         op: "append",
         // TODO alipay wechat
+        csvType: element.csvType,
         no: element.no,
       }),
     })
