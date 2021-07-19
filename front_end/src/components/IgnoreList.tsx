@@ -65,7 +65,6 @@ const IgnoreList = ({
 
   return (
     <>
-      <h2>Ignore List</h2>
       <table>
         <tbody>
           {ignore_list.map((element: SpendingRecord) => (
@@ -76,7 +75,7 @@ const IgnoreList = ({
                   variant="contained"
                   color="primary"
                 >
-                  Cancel Ignore
+                  取消忽略
                 </Button>
               </td>
               <td>{element.opposite}</td>

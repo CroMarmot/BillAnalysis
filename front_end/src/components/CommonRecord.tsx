@@ -52,7 +52,6 @@ const getInfo = ({
         const keysArr: string[] = Array.from(keysSet);
         keysArr.sort();
 
-        console.warn(data);
         // 使用刚指定的配置项和数据显示图表。
         myChart.setOption({
           title: {
@@ -76,13 +75,13 @@ const getInfo = ({
           },
           series: [
             {
-              name: "支付宝",
+              name: "Alipay",
               type: "bar",
               stack: "one",
               data: keysArr.map((key) => data["Alipay"][key]?.out_cnt / 100),
             },
             {
-              name: "微信",
+              name: "Wechat",
               type: "bar",
               stack: "one",
               data: keysArr.map((key) => data["Wechat"][key]?.out_cnt / 100),
@@ -95,6 +94,58 @@ const getInfo = ({
         });
       }
     );
+};
+
+const draw_echarts_pie = ({
+  echarts_div,
+  detail_state,
+}: {
+  echarts_div: HTMLDivElement;
+  detail_state: SpendingRecord[];
+}) => {
+  let opposite2count: { [key: string]: number } = {};
+  detail_state.forEach((item) => {
+    if (!opposite2count[item.opposite]) {
+      opposite2count[item.opposite] = 0;
+    }
+    opposite2count[item.opposite] = Number(
+      (opposite2count[item.opposite] + Number(item.amount)).toFixed(2)
+    );
+  });
+  let data = Object.keys(opposite2count).map((key) => ({
+    value: opposite2count[key],
+    name: key,
+  }));
+  data.sort((a, b) => b.value - a.value);
+
+  const myChart = echarts.init(echarts_div);
+  // 使用刚指定的配置项和数据显示图表。
+  myChart.setOption({
+    title: {
+      text: "月详情",
+      left: "center",
+    },
+    tooltip: {
+      trigger: "item",
+    },
+    legend: {
+      type: "scroll",
+      orient: "vertical",
+      right: 10,
+      top: 20,
+      bottom: 20,
+      left: "left",
+    },
+    series: [
+      {
+        name: "月详情",
+        type: "pie",
+        radius: "50%",
+        data,
+      },
+    ],
+  });
+  return;
 };
 
 const CommonRecord = ({
@@ -114,13 +165,14 @@ const CommonRecord = ({
 }) => {
   const styles = {
     canvas: {
-      width: 800,
+      width: 1000,
       height: 600,
     },
   };
   const classes = useStyles();
 
   const echarts_div = useRef() as React.MutableRefObject<HTMLDivElement>;
+  const echarts_pie_div = useRef() as React.MutableRefObject<HTMLDivElement>;
   const [detail_state, set_detail_state] = useState([]);
   const [sort_col, set_sort_col] = useState(3);
   // TODO
@@ -181,6 +233,7 @@ const CommonRecord = ({
     return (
       <div>
         <h2>{query_month}</h2>
+        <div style={styles.canvas} ref={echarts_pie_div}></div>
         <TableContainer component={Paper}>
           <Table
             className={classes.table}
@@ -213,7 +266,7 @@ const CommonRecord = ({
                       variant="contained"
                       color="primary"
                     >
-                      Ignore
+                      忽略
                     </Button>
                   </TableCell>
                   <TableCell>{element.opposite}</TableCell>
@@ -246,6 +299,14 @@ const CommonRecord = ({
       // cleanup
     };
   }, [refresh, api_all, echarts_title]);
+
+  useEffect(() => {
+    draw_echarts_pie({
+      echarts_div: echarts_pie_div.current,
+      detail_state,
+    });
+    return () => {};
+  }, [refresh, detail_state]);
 
   useEffect(() => {
     if (query_month === "") {
