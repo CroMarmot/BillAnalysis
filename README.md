@@ -30,7 +30,7 @@ https://github.com/CroMarmot/zipcracker
 
 ### backend
 
-```
+```sh
 # 进入服务端文件夹
 cd backend
 # 创建虚拟环境
@@ -45,7 +45,7 @@ python3 -m bill_analysis.analysis record.db
 
 ### frontend
 
-```
+```sh
 # 进入前端文件夹
 cd frontend
 # 查看可用node版本
@@ -64,11 +64,11 @@ yarn start
 
 ## 当前功能
 
- - 支持 支付宝账单 和 微信账单
- - 上传csv文件, 自动识别账单类型
- - 查看 月/周 统计(柱状)/详情(饼图+列表)
- - 支持金额,名称,交易时间排序
- - 标记忽略，查看忽略列表，撤销标记
+- 支持 支付宝账单 和 微信账单
+- 上传csv文件, 自动识别账单类型
+- 查看 月/周 统计(柱状)/详情(饼图+列表)
+- 支持金额,名称,交易时间排序
+- 标记忽略，查看忽略列表，撤销标记
 
 ## TODO
 

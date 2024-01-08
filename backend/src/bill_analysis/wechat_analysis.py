@@ -1,38 +1,29 @@
 import csv
-import os
-import json
-import sqlite3
 import logging
+import os
+import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Dict, List
+
+logger = logging.getLogger("bill_analysis.wechat")
+logger.setLevel(logging.DEBUG)
+record_len = 11
+
+Wechat = "Wechat"
 
 
-recordLen = 11
-TABLE_IGNORE = "wechat_ignore_table"
-
-"""
-交易时间 0
-交易类型 1
-交易对方 2
-商品 3
-收/支 4
-金额(元) 5
-支付方式 6
-当前状态 7
-交易单号 8
-商户单号 9
-备注 10
-"""
-
-Wechat = 'Wechat'
+def parse_zh_time(t: str) -> datetime:
+    return datetime.strptime(t + "+08:00", "%Y-%m-%d %H:%M:%S%z")
 
 
 class IgnoreSet:
     def __init__(self, db_path) -> None:
         con = sqlite3.connect(db_path)
         cur = con.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS " +
-                    TABLE_IGNORE + " (ignore_no text primary key)")
-        cur.execute("SELECT ignore_no from " + TABLE_IGNORE + "")
+        # 记录no
+        cur.execute("CREATE TABLE IF NOT EXISTS wechat_ignore_table (ignore_no text primary key)")
+        cur.execute("SELECT ignore_no from wechat_ignore_table")
         ignore_list = cur.fetchall()
         con.commit()
         con.close()
@@ -41,18 +32,255 @@ class IgnoreSet:
             self.ignore_set.add(row[0])
 
 
+@dataclass
+class DataRow:
+    time: str  #  交易时间 0
+    type_: str  # 交易类型 1
+    oppo: str  # 交易对方 2
+    prod: str  # 商品 3
+    io: str  # 收/支 4
+    amount: int  # 金额(元) 5 * 100
+    source: str  # 支付方式 6
+    stat: str  # 当前状态 7
+    no: str  # 交易单号 8
+    subno: str  # 商户单号 9
+    note: str  # 备注 10
+    filename: str  # 文件名
+
+
+@dataclass
+class FileMeta:
+    name: str
+    record_cnt: int
+
+
+# 单条记录
+@dataclass
+class SingleResult:
+    amount: str  # * 100
+    io: str
+    no: str
+    oppo: str
+    prod: str
+    time: str
+
+
+@dataclass
+class WeekListResult:
+    yearweek: str
+    amount: str  # * 100
+    io: str
+
+
+@dataclass
+class MonthListResult:
+    yearmonth: str
+    amount: str  # * 100
+    io: str
+
+
+@dataclass
+class YearListResult:
+    year: str
+    amount: str  # * 100
+    io: str
+
+
+class WeChatDataDBHelper:
+    db_path = ""
+
+    def __init__(self, db_path) -> None:
+        self.db_path = db_path
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        # 一个数据可能出现在多个文件中, 一个文件中no互不重复
+        # 这样删除文件时能保持重复的数据还在
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS wechat_data \
+                (no text, time text, type text,oppo text,prod text,io text,\
+                    amount INTEGER,source text,stat text,subno text,note text,filename text,\
+                    PRIMARY KEY (no, filename) )"
+        )
+        con.commit()
+        con.close()
+
+    def insert(self, arr: List[DataRow]) -> None:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        for row in arr:
+            cur.execute(
+                "INSERT OR REPLACE INTO wechat_data \
+                    (no, time, type,oppo,prod,io,amount,source,stat,subno,note,filename) \
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                [
+                    row.no,
+                    row.time,
+                    row.type_,
+                    row.oppo,
+                    row.prod,
+                    row.io,
+                    row.amount,
+                    row.source,
+                    row.stat,
+                    row.subno,
+                    row.note,
+                    row.filename,
+                ],
+            )
+        con.commit()
+        con.close()
+
+    def parse_csv(self, csv_file_path: str, filename: str) -> List[DataRow]:
+        """
+        :params file_path where file locate
+        :params filename 'key'
+        """
+        arr: List[DataRow] = []
+        with open(csv_file_path) as csvfile:
+            spamreader = csv.reader(csvfile)
+            head = None
+            for row in spamreader:
+                if len(row) != record_len:  # 忽略前面几行
+                    continue
+                if head is None:
+                    head = [x.strip().strip("\t") for x in row]
+                    continue
+                r = [x.strip().strip("\t") for x in row]
+                if r[5].startswith("¥"):
+                    r[5] = r[5].replace("¥", "")
+
+                arr.append(
+                    DataRow(
+                        time=r[0],  #  交易时间 0
+                        type_=r[1],  # 交易类型 1
+                        oppo=r[2],  # 交易对方 2
+                        prod=r[3],  # 商品 3
+                        io=r[4],  # 收/支 4
+                        amount=int(float(r[5]) * 100),  # 金额(元) 5
+                        source=r[6],  # 支付方式 6
+                        stat=r[7],  # 当前状态 7
+                        no=r[8],  # 交易单号 8
+                        subno=r[9],  # 商户单号 9
+                        note=r[10],  # 备注 10
+                        filename=filename,  # 文件名
+                    )
+                )
+        return arr
+
+    def add_file(self, csv_file_path: str, filename: str) -> None:
+        arr = self.parse_csv(csv_file_path, filename)
+        self.insert(arr)
+
+    def remove_file(self, filename: str) -> None:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute("DELETE from wechat_data where filename=?;", [filename])
+        rows = cur.fetchall()
+        logger.debug(str(rows))
+        con.commit()
+        con.close()
+
+    # 文件 和 记录数
+    def file_list(self) -> List[FileMeta]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute("SELECT filename, count(*) FROM wechat_data GROUP BY filename;")
+        rows = cur.fetchall()
+        logger.debug(str(rows))
+        return [FileMeta(name=row[0], record_cnt=int(row[1])) for row in rows]
+
+    # 周总 收入 支出
+    def week_list(self) -> List[WeekListResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT yw, io, sum(amount) from \
+                    (select DISTINCT no, amount, io, strftime("%Y-%W", time) as yw from wechat_data) \
+                    GROUP by yw,io;'
+        )
+        rows = cur.fetchall()
+        return [WeekListResult(yearweek=row[0], io=row[1], amount=row[2]) for row in rows]
+
+    # 单周查询
+    def week_query(self, week_str: str, in_out: str) -> List[SingleResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT no, io, amount, oppo,prod,time from \
+            (select DISTINCT no, amount, io, oppo,prod,time, strftime("%Y-%W", time) as ym from wechat_data)\
+                  WHERE ym=? and io=?;',
+            [week_str, in_out],
+        )
+        rows = cur.fetchall()
+        return [
+            SingleResult(no=row[0], io=row[1], amount=row[2], oppo=row[3], prod=row[4], time=row[5]) for row in rows
+        ]
+
+    # 月总 收入 支出
+    def month_list(self) -> List[MonthListResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT ym, io, sum(amount) from \
+                    (select DISTINCT no, amount, io, strftime("%Y-%m", time) as ym from wechat_data) \
+                    GROUP by ym,io;'
+        )
+        rows = cur.fetchall()
+        return [MonthListResult(yearmonth=row[0], io=row[1], amount=row[2]) for row in rows]
+
+    # 单月查询
+    def month_query(self, month_str: str, in_out: str) -> List[SingleResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT no, io, amount, oppo,prod,time from \
+            (select DISTINCT no, amount, io, oppo,prod,time, strftime("%Y-%m", time) as ym from wechat_data)\
+                  WHERE ym=? and io=?;',
+            [month_str, in_out],
+        )
+        rows = cur.fetchall()
+        return [
+            SingleResult(no=row[0], io=row[1], amount=row[2], oppo=row[3], prod=row[4], time=row[5]) for row in rows
+        ]
+
+    # 年总 收入 支出
+    def year_list(self) -> List[YearListResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT y, io, sum(amount) from \
+                    (select DISTINCT no, amount, io, strftime("%Y", time) as y from wechat_data) \
+                    GROUP by y,io;'
+        )
+        rows = cur.fetchall()
+        return [YearListResult(year=row[0], io=row[1], amount=row[2]) for row in rows]
+
+    # 年总查询
+    def year_query(self, key_str: str, in_out: str) -> List[SingleResult]:
+        con = sqlite3.connect(self.db_path)
+        cur = con.cursor()
+        cur.execute(
+            'SELECT no, io, amount, oppo,prod,time from \
+            (select DISTINCT no, amount, io, oppo,prod,time, strftime("%Y", time) as y from wechat_data)\
+                  WHERE y=? and io=?;',
+            [key_str, in_out],
+        )
+        rows = cur.fetchall()
+        return [
+            SingleResult(no=row[0], io=row[1], amount=row[2], oppo=row[3], prod=row[4], time=row[5]) for row in rows
+        ]
+
+
 class WechatAnalysis:
-    def __init__(self, file_path, ignore_set) -> None:
+    def __init__(self, file_path: str, ignore_set) -> None:
         self.data_mem = []
         self.ignore_set = ignore_set
-
-        self.csv2mem(file_path)
 
     def in_out_check(self, row, compare_txt):
         return row[4] == compare_txt
 
     def is_spending(self, row):
-        return self.in_out_check(row, '支出')
+        return self.in_out_check(row, "支出")
 
     def get_no(self, row):
         return row[8]
@@ -60,8 +288,8 @@ class WechatAnalysis:
     def get_time_str(self, row):
         return row[0]
 
-    def get_time(self, row):
-        return datetime.strptime(self.get_time_str(row), "%Y-%m-%d %H:%M:%S")
+    def get_time(self, row) -> datetime:
+        return parse_zh_time(self.get_time_str(row))
 
     def get_amount(self, row):
         # ¥14.00
@@ -69,13 +297,23 @@ class WechatAnalysis:
 
     # check if it is Wechat
     @staticmethod
-    def csvType(file_path):
-        with open(file_path) as csvfile:
-            spamreader = csv.reader(csvfile)
-            for row in spamreader:
-                # first line
-                return "微信" in row[0]
+    def is_csv(file_path):
+        if file_path.lower().endswith(".csv"):
+            try:
+                with open(file_path) as csvfile:
+                    spamreader = csv.reader(csvfile)
+                    for row in spamreader:
+                        # first line
+                        return "微信" in row[0]
+            except Exception as e:
+                logger.exception(e)
+                return False
         return False
+
+    @staticmethod
+    def is_zip_file(file_path):
+        filename: str = os.path.split(file_path)[-1]
+        return filename.startswith("微信支付账单") and filename.lower().endswith(".zip")
 
     def row2api(self, row):
         return {
@@ -84,137 +322,21 @@ class WechatAnalysis:
             "opposite": row[2],
             "amount": self.get_amount(row),
             "time": self.get_time_str(row),
-            "status": '',  # ??
-            "refund": '',  # ??
+            "status": "",  # ??
+            "refund": "",  # ??
         }
 
-    def full_list(self):
-        jsonArr = []
-        for row in self.data_mem:
-            obj = {}
-            for i in range(recordLen):
-                obj[head[i]] = row[i]
-            jsonArr.append(obj)
-        return jsonArr
-
-    def csv2mem(self, file_path):
-        if not WechatAnalysis.csvType(file_path):
-            logging.error("Not a Wechat csv or encode error:", file_path)
-            return
-        self.data_mem = []
-        with open(file_path) as csvfile:
-            spamreader = csv.reader(csvfile)
-            head = None
-            for row in spamreader:
-                if len(row) != recordLen:
-                    continue
-                if head == None:
-                    head = [x.strip().strip('\t') for x in row]
-                    continue
-                self.data_mem.append([x.strip().strip("\t") for x in row])
-        self.data_mem.reverse()
-
-    def month(self):
-        month = {}
-        for row in self.data_mem:
-            # 创建时间 支付时间可能为空
-            dateobj = self.get_time(row)
-            amount = self.get_amount(row)
-            refund = 0  # TODO ? wechat support ??
-            month_str = "{0:%Y-%m}".format(dateobj)
-            if self.get_no(row) in self.ignore_set:
-                continue
-
-            if month_str not in month:
-                month[month_str] = {
-                    "in_cnt": 0,
-                    "out_cnt": 0
-                }
-            if self.is_spending(row):
-                month[month_str]["out_cnt"] += round(100 *
-                                                     (float(amount) - float(refund)))
-            else:  # 收入 或 其它
-                month[month_str]["in_cnt"] += round(100*float(amount))
-        return month
-
-    def month_query(self, queryData):
+    def ignore_list(self, query_data):
         # 默认查询支出
-        # TODO 不要修改引用 ? 不同数据源的整合
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
-
-        month_result = []
-        for row in self.data_mem:
-            # 创建时间 支付时间可能为空
-            dateobj = self.get_time(row)
-            month_str = "{0:%Y-%m}".format(dateobj)
-            if self.get_no(row) in self.ignore_set:
-                continue
-
-            if month_str != queryData["key"]:
-                continue
-
-            if not self.in_out_check(row, queryData["in_out"]):
-                continue
-
-            month_result.append(self.row2api(row))
-        return month_result
-
-    def week(self):
-        week = {}
-        for row in self.data_mem:
-            # 创建时间 支付时间可能为空
-            dateobj = self.get_time(row)
-            amount = self.get_amount(row)
-            refund = 0  # TODO wechat support ?
-            week_str = "{0:%Y-%W}".format(dateobj)
-            if self.get_no(row) in self.ignore_set:
-                continue
-
-            if week_str not in week:
-                week[week_str] = {
-                    "in_cnt": 0,
-                    "out_cnt": 0
-                }
-            if self.is_spending(row):
-                week[week_str]["out_cnt"] += round(100 *
-                                                   (float(amount)-float(refund)))
-            else:  # 收入
-                week[week_str]["in_cnt"] += round(100*float(amount))
-        return week
-
-    def week_query(self, queryData):
-        # 默认查询支出
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
-        week_result = []
-        for row in self.data_mem:
-            # 创建时间 支付时间可能为空
-            dateobj = self.get_time(row)
-            week_str = "{0:%Y-%W}".format(dateobj)
-            if self.get_no(row) in self.ignore_set:
-                continue
-
-            if week_str != queryData["key"]:
-                continue
-
-            if not self.in_out_check(row, queryData["in_out"]):
-                continue
-
-            week_result.append(self.row2api(row))
-        return week_result
-
-    def ignore_list(self, queryData):
-        # 默认查询支出
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
+        if "in_out" not in query_data:
+            query_data["in_out"] = "支出"
 
         result = []
         for row in self.data_mem:
             if self.get_no(row) not in self.ignore_set:
                 continue
 
-            if not self.in_out_check(row, queryData["in_out"]):
+            if not self.in_out_check(row, query_data["in_out"]):
                 continue
 
             result.append(self.row2api(row))
@@ -223,30 +345,29 @@ class WechatAnalysis:
 
 
 class WechatAnalysisGroup:
-    wechat_groups = {}
+    wechat_groups: Dict[str, WechatAnalysis]
 
     def __init__(self, db_path) -> None:
         self.db_path = db_path
         self.ig_set = IgnoreSet(db_path)
+        self.wechat_groups = {}
+        self.db_helper = WeChatDataDBHelper(self.db_path)
 
-    def add_file(self, filename, upload_path):
-        self.wechat_groups[filename] = WechatAnalysis(
-            upload_path, self.ig_set.ignore_set)
+    def add_file(self, filename: str, upload_path: str) -> None:
+        self.db_helper.add_file(upload_path, filename)
+
+    def remove_file(self, filename: str) -> None:
+        self.db_helper.remove_file(filename)
 
     def get_groups(self):
-        result = []
-        for k in self.wechat_groups:
-            result.append({
-                "name": k,
-                "type": Wechat
-            })
-        return result
+        li = self.db_helper.file_list()
+        return [{"name": o.name, "type": Wechat, "cnt": o.record_cnt} for o in li]
 
-    def get_ignore_list(self, queryData):
+    def get_ignore_list(self, query_data):
         result = []
         for key in self.wechat_groups:
             wechat_ins = self.wechat_groups[key]
-            ins_result = wechat_ins.ignore_list(queryData)
+            ins_result = wechat_ins.ignore_list(query_data)
             # TODO merge instead of append
             result += ins_result
 
@@ -254,71 +375,133 @@ class WechatAnalysisGroup:
 
     def get_week(self):
         week = {}
-        for key in self.wechat_groups:
-            wechat_ins = self.wechat_groups[key]
-            ins_week = wechat_ins.week()
-            # TODO merge instead of replace
-            for k in ins_week:
-                week[k] = ins_week[k]
-
+        li = self.db_helper.week_list()
+        for o in li:
+            if o.yearweek not in week:
+                week[o.yearweek] = {
+                    "in_cnt": 0,
+                    "out_cnt": 0,
+                }
+            if o.io == "收入":
+                week[o.yearweek]["in_cnt"] = o.amount
+            elif o.io == "支出":
+                week[o.yearweek]["out_cnt"] = o.amount
+            else:
+                logger.error("Unkown io:" + o.io)
         return week
 
-    def week_query(self, queryData):
-        result = []
+    def week_query(self, query_data):
+        in_out = query_data["in_out"] if "in_out" in query_data else "支出"
+        month_str = query_data["key"]
+        li = self.db_helper.week_query(month_str, in_out)
+        return [
+            {
+                "csvType": Wechat,
+                "no": o.no,
+                "opposite": o.oppo,
+                "amount": f"{int(o.amount)/100:.2f}",
+                "time": o.time,
+                "status": "",  # ??
+                "refund": "",  # ??
+            }
+            for o in li
+        ]
 
-        for key in self.wechat_groups:
-            wechat_ins = self.wechat_groups[key]
-            ins_result = wechat_ins.week_query(queryData)
-            # TODO merge instead of replace
-            result += ins_result
+    def get_year(self):
+        year = {}
+        li = self.db_helper.year_list()
+        for o in li:
+            if o.year not in year:
+                year[o.year] = {
+                    "in_cnt": 0,
+                    "out_cnt": 0,
+                }
+            if o.io == "收入":
+                year[o.year]["in_cnt"] = o.amount
+            elif o.io == "支出":
+                year[o.year]["out_cnt"] = o.amount
+            else:
+                logger.error("Unkown io:" + o.io)
+        return year
 
-        return result
+    def year_query(self, query_data: Dict[str, str]):
+        # in_out = query_data["in_out"] if "in_out" in query_data else "支出"
+        in_out = query_data["in_out"] if "in_out" in query_data else "支出"
+        key_str = query_data["key"]
+        li = self.db_helper.year_query(key_str, in_out)
+        return [
+            {
+                "csvType": Wechat,
+                "no": o.no,
+                "opposite": o.oppo,
+                "amount": f"{int(o.amount)/100:.2f}",
+                "time": o.time,
+                "status": "",  # ??
+                "refund": "",  # ??
+            }
+            for o in li
+        ]
 
     def get_month(self):
         month = {}
-        for key in self.wechat_groups:
-            wechat_ins = self.wechat_groups[key]
-            ins_month = wechat_ins.month()
-            # TODO merge instead of replace
-            for k in ins_month:
-                month[k] = ins_month[k]
-
+        li = self.db_helper.month_list()
+        for o in li:
+            if o.yearmonth not in month:
+                month[o.yearmonth] = {
+                    "in_cnt": 0,
+                    "out_cnt": 0,
+                }
+            if o.io == "收入":
+                month[o.yearmonth]["in_cnt"] = o.amount
+            elif o.io == "支出":
+                month[o.yearmonth]["out_cnt"] = o.amount
+            else:
+                logger.error("Unkown io:" + o.io)
         return month
 
-    def month_query(self, queryData):
-        result = []
+    def month_query(self, query_data: Dict[str, str]):
+        # in_out = query_data["in_out"] if "in_out" in query_data else "支出"
+        in_out = query_data["in_out"] if "in_out" in query_data else "支出"
+        month_str = query_data["key"]
+        li = self.db_helper.month_query(month_str, in_out)
+        return [
+            {
+                "csvType": Wechat,
+                "no": o.no,
+                "opposite": o.oppo,
+                "amount": f"{int(o.amount)/100:.2f}",
+                "time": o.time,
+                "status": "",  # ??
+                "refund": "",  # ??
+            }
+            for o in li
+        ]
 
-        for key in self.wechat_groups:
-            wechat_ins = self.wechat_groups[key]
-            ins_result = wechat_ins.month_query(queryData)
-            # TODO merge instead of replace
-            result += ins_result
-        return result
-
-    def ignore_no(self, queryData):
-        ignore_set = self.ig_set.ignore_set
-        op = queryData["op"]
-        if op == 'append':
-            con = sqlite3.connect(self.db_path)
-            cur = con.cursor()
-            ignore_set.add(queryData["no"])
-            # TODO duplicate insert
-            cur.execute(
-                f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
-            con.commit()
-            con.close()
-        elif op == "remove":
-            if queryData["no"] not in ignore_set:
-                return False
-            con = sqlite3.connect(self.db_path)
-            cur = con.cursor()
-            ignore_set.remove(queryData["no"])
-            # TODO duplicate insert
-            cur.execute(
-                f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
-
-            con.commit()
-            con.close()
-        else:
-            return False
+    def ignore_no(self, query_data):
         return True
+        # ignore_set = self.ig_set.ignore_set
+        # op = query_data["op"]
+        # if op == "append":
+        #     con = sqlite3.connect(self.db_path)
+        #     cur = con.cursor()
+        #     ignore_set.add(query_data["no"])
+        #     # TODO duplicate insert
+        #     # TODO safe sql
+        #     cur.execute(f"insert into wechat_ignore_table values ('{query_data['no']}')")
+        #     con.commit()
+        #     con.close()
+        # elif op == "remove":
+        #     if query_data["no"] not in ignore_set:
+        #         return False
+        #     con = sqlite3.connect(self.db_path)
+        #     cur = con.cursor()
+        #     ignore_set.remove(query_data["no"])
+        #     # TODO duplicate insert
+        #     # TODO safe sql
+        #     cur.execute(f"DELETE FROM wechat_ignore_table WHERE ignore_no ='{query_data['no']}' ")
+
+        #     con.commit()
+        #     con.close()
+        # else:
+        #     return False
+        # return True

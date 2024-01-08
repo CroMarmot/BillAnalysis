@@ -74,10 +74,11 @@ export default function Home() {
               onChange={handleChange}
               aria-label="simple tabs example"
             >
-              <Tab label="月出账" {...a11yProps(0)} />
-              <Tab label="周出账" {...a11yProps(1)} />
-              <Tab label="忽略列表" {...a11yProps(2)} />
-              <Tab label="数据管理" {...a11yProps(3)} />
+              <Tab label="月" {...a11yProps(0)} />
+              <Tab label="周" {...a11yProps(1)} />
+              <Tab label="年" {...a11yProps(2)} />
+              {/* <Tab label="忽略列表" {...a11yProps(3)} /> */}
+              <Tab label="数据管理" {...a11yProps(4)} />
             </Tabs>
           </AppBar>
           <TabPanel value={value} index={0}>
@@ -85,7 +86,7 @@ export default function Home() {
               api_all={`${url_prefix}/api/month`}
               api_query={`${url_prefix}/api/month_query`}
               api_ignore_no={`${url_prefix}/api/ignore_no`}
-              echarts_title="月出账"
+              echarts_title="月"
               refresh={updated}
               updateFn={doUpdate}
             />
@@ -95,19 +96,29 @@ export default function Home() {
               api_all={`${url_prefix}/api/week`}
               api_query={`${url_prefix}/api/week_query`}
               api_ignore_no={`${url_prefix}/api/ignore_no`}
-              echarts_title="周出账"
+              echarts_title="周"
               refresh={updated}
               updateFn={doUpdate}
             />
           </TabPanel>
           <TabPanel value={value} index={2}>
+            <CommonRecord
+              api_all={`${url_prefix}/api/year`}
+              api_query={`${url_prefix}/api/year_query`}
+              api_ignore_no={`${url_prefix}/api/ignore_no`}
+              echarts_title="年"
+              refresh={updated}
+              updateFn={doUpdate}
+            />
+          </TabPanel>
+          <TabPanel value={value} index={3}>
             <IgnoreList
               url_prefix={url_prefix}
               refresh={updated}
               updateFn={doUpdate}
             />
           </TabPanel>
-          <TabPanel value={value} index={3}>
+          <TabPanel value={value} index={4}>
             <DataManager
               url_prefix={url_prefix}
               refresh={updated}

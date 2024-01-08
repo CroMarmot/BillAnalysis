@@ -73,6 +73,24 @@ const DataMancsvTyper = ({
       });
   };
 
+  const removeFile = (filename: string, csvType: string) => {
+    const formData = new FormData();
+    formData.append("filename", filename);
+    formData.append("csvType", csvType);
+
+    fetch(`${url_prefix}/api/remove_file`, {
+      method: "POST",
+      body: formData,
+    })
+      .then((response) => response.json())
+      .then(() => {
+        updateFn();
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+      });
+  };
+
   return (
     <>
       <input type="file" ref={inputRef} />
@@ -87,7 +105,9 @@ const DataMancsvTyper = ({
           </MenuItem>
         ))}
       </Select>
-      <Button onClick={uploadCsv}>Upload</Button>
+      <Button onClick={uploadCsv}
+        variant="contained"
+        color="primary">分析</Button>
       <div>
         <TableContainer component={Paper}>
           <Table
@@ -99,6 +119,7 @@ const DataMancsvTyper = ({
               <TableRow>
                 <TableCell>名称</TableCell>
                 <TableCell align="right">类型</TableCell>
+                <TableCell align="right">操作</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -108,6 +129,15 @@ const DataMancsvTyper = ({
                     {element.name}
                   </TableCell>
                   <TableCell align="right">{element.type}</TableCell>
+                  <TableCell align="right">
+                    <Button
+                      onClick={() => removeFile(element.name, element.type)}
+                      variant="contained"
+                      color="primary"
+                    >
+                      删除
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

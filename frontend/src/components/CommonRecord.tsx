@@ -22,12 +22,14 @@ const getInfo = ({
   api_all,
   echarts_div,
   echarts_title,
-  set_query_month,
+  set_query_key,
+  set_query_in_out,
 }: {
   api_all: string;
   echarts_div: HTMLDivElement;
   echarts_title: string;
-  set_query_month: Function;
+    set_query_key: Function;
+    set_query_in_out: Function;
 }) => {
   return fetch(api_all)
     .then((res) => res.json())
@@ -75,13 +77,25 @@ const getInfo = ({
           },
           series: [
             {
-              name: "Alipay",
+              name: "Alipay收入",
+              type: "bar",
+              stack: "two",
+              data: keysArr.map((key) => data["Alipay"][key]?.in_cnt / 100),
+            },
+            {
+              name: "Wechat收入",
+              type: "bar",
+              stack: "two",
+              data: keysArr.map((key) => data["Wechat"][key]?.in_cnt / 100),
+            },
+            {
+              name: "Alipay支出",
               type: "bar",
               stack: "one",
               data: keysArr.map((key) => data["Alipay"][key]?.out_cnt / 100),
             },
             {
-              name: "Wechat",
+              name: "Wechat支出",
               type: "bar",
               stack: "one",
               data: keysArr.map((key) => data["Wechat"][key]?.out_cnt / 100),
@@ -89,8 +103,13 @@ const getInfo = ({
           ],
         });
 
-        myChart.on("click", ({ dataIndex }: { dataIndex: number }) => {
-          set_query_month(keysArr[dataIndex]);
+        myChart.on("click", (r: { dataIndex: number, seriesName: string }) => {
+          if (r.seriesName.endsWith('支出')) {
+            set_query_in_out('支出');
+          } else if (r.seriesName.endsWith('收入')) {
+            set_query_in_out('收入');
+          }
+          set_query_key(keysArr[r.dataIndex]);
         });
       }
     );
@@ -122,7 +141,7 @@ const draw_echarts_pie = ({
   // 使用刚指定的配置项和数据显示图表。
   myChart.setOption({
     title: {
-      text: "月详情",
+      text: "详情",
       left: "center",
     },
     tooltip: {
@@ -138,7 +157,7 @@ const draw_echarts_pie = ({
     },
     series: [
       {
-        name: "月详情",
+        name: "详情",
         type: "pie",
         radius: "50%",
         data,
@@ -175,9 +194,9 @@ const CommonRecord = ({
   const echarts_pie_div = useRef() as React.MutableRefObject<HTMLDivElement>;
   const [detail_state, set_detail_state] = useState([]);
   const [sort_col, set_sort_col] = useState(3);
-  // TODO
   const [sort_order, set_sort_order] = useState(1);
-  const [query_month, set_query_month] = useState("");
+  const [query_key, set_query_key] = useState("");
+  const [query_in_out, set_query_in_out] = useState("支出");
 
   const ignoreItem = (element: SpendingRecord) => {
     return fetch(api_ignore_no, {
@@ -232,7 +251,7 @@ const CommonRecord = ({
 
     return (
       <div>
-        <h2>{query_month}</h2>
+        <h2>{query_key}</h2>
         <div style={styles.canvas} ref={echarts_pie_div}></div>
         <TableContainer component={Paper}>
           <Table
@@ -293,7 +312,8 @@ const CommonRecord = ({
       api_all,
       echarts_div: echarts_div.current,
       echarts_title,
-      set_query_month,
+      set_query_key,
+      set_query_in_out,
     });
     return () => {
       // cleanup
@@ -305,11 +325,11 @@ const CommonRecord = ({
       echarts_div: echarts_pie_div.current,
       detail_state,
     });
-    return () => {};
+    return () => { };
   }, [refresh, detail_state]);
 
   useEffect(() => {
-    if (query_month === "") {
+    if (query_key === "") {
       return;
     }
     fetch(api_query, {
@@ -318,18 +338,35 @@ const CommonRecord = ({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        key: query_month,
+        key: query_key,
+        in_out: query_in_out,
       }),
     })
       .then((res) => res.json())
       .then((query_response) => {
         set_detail_state(query_response);
       });
-  }, [refresh, query_month, api_query]);
+  }, [refresh, query_key, query_in_out, api_query]);
 
   return (
     <>
       <div style={styles.canvas} ref={echarts_div}></div>
+      <h1>
+        <Button
+          onClick={() => set_query_in_out('收入')}
+          variant="contained"
+          color={query_in_out === '收入' ? "primary" : 'default'}
+        >
+          收入
+        </Button>
+        <Button
+          onClick={() => set_query_in_out('支出')}
+          variant="contained"
+          color={query_in_out === '支出' ? "primary" : 'default'}
+        >
+          支出
+        </Button>
+      </h1>
       {material_table()}
     </>
   );

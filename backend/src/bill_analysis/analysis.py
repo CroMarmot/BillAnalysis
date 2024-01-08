@@ -1,149 +1,203 @@
 import argparse
-import csv
 import json
+import logging
 import os
-import sqlite3
-from datetime import datetime
+import tempfile
+from enum import Enum
+from pathlib import Path
 
-from flask import Flask, render_template, request
-from flask.sessions import NullSession
+from flask import Flask, request
 from flask_cors import CORS
 
-from .alipay_analysis import Alipay, AlipayAnalysis, AlipayAnalysisGroup
-from .wechat_analysis import Wechat, WechatAnalysis, WechatAnalysisGroup
+# from .crack_zip import crack_zip
+from .alipay_analysis import AlipayAnalysis, AlipayAnalysisGroup
+from .wechat_analysis import WechatAnalysis, WechatAnalysisGroup
 
-# TODO use logging
-
-app = Flask(__name__)
-# 不用cors的话 可以用nginx
-CORS(app)
-
-fileTypes = {
-    "Alipay": Alipay,
-    "Wechat": Wechat
-}
-
-AAG = None
-WAG = None
-
-# TODO 泛型合并 AAG WAG
-AG = {}
+app_name = "bill_analysis"
 
 
-def getFilePath():
-    parser = argparse.ArgumentParser(description='处理Alipay/Wechat的交易记录')
-    parser.add_argument('db', help='db file path')
-    args = parser.parse_args()
-    return args.db
-
-
-@app.route("/api/ignore_no", methods=["POST"])
-def api_ignore_no():
-    queryData = json.loads(request.get_data(as_text=True))
-    if queryData['csvType'] == Alipay:
-        ins_result = AAG.ignore_no(queryData)
-    elif queryData['csvType'] == Wechat:
-        ins_result = WAG.ignore_no(queryData)
-    else:
-        return json.dumps({"status": 418}), 418
-
-    if not ins_result:
-        return json.dumps({"status": 418}), 418
-
-    return json.dumps({"status": 200}, ensure_ascii=False)
-
-
-@app.route("/api/month")
-def api_month():
-    result = {
-        Wechat: WAG.get_month(),
-        Alipay: AAG.get_month(),
-    }
-    return json.dumps(result, ensure_ascii=False)
-
-
-@app.route("/api/month_query", methods=['POST'])
-def api_month_query():
-    queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.month_query(queryData) + WAG.month_query(queryData)
-    return json.dumps(result, ensure_ascii=False)
-
-
-@app.route("/api/week")
-def api_week():
-    result = {
-        Wechat: WAG.get_week(),
-        Alipay: AAG.get_week(),
-    }
-
-    return json.dumps(result, ensure_ascii=False)
-
-
-@app.route("/api/week_query", methods=['POST'])
-def api_week_query():
-    queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.week_query(queryData) + WAG.week_query(queryData)
-    return json.dumps(result, ensure_ascii=False)
-
-
-@app.route("/api/ignore_list", methods=["POST"])
-def api_ignore_list():
-    queryData = json.loads(request.get_data(as_text=True))
-    result = AAG.get_ignore_list(queryData) + WAG.get_ignore_list(queryData)
-    return json.dumps(result, ensure_ascii=False)
-
-
-@app.route('/api/file_list')
-def file_list():
-    result = AAG.get_groups() + WAG.get_groups()
-
-    return json.dumps(result, ensure_ascii=False)
-
-# TODO 根据csv内容 自动监测类型
-
-
-@app.route('/api/upload', methods=['POST'])
-def api_upload():
-    if request.method == 'POST':
-        f = request.files['file']
-        csvType = request.form['csvType']
-        upload_path = os.path.join(os.path.dirname(
-            __file__), 'tmp/uploads', f.filename)
-        f.save(upload_path)
-
-        # 注意：没有的文件夹一定要先创建，不然会提示没有该路径
-        # TODO safe filename
-        # TODO support any encode
-        print(csvType)
-        if csvType == fileTypes["Alipay"]:
-            AAG.add_file(f.filename, upload_path)
-        elif csvType == fileTypes["Wechat"]:
-            WAG.add_file(f.filename, upload_path)
-        elif csvType == "Auto":
-            if AlipayAnalysis.csvType(upload_path):
-                AAG.add_file(f.filename, upload_path)
-            elif WechatAnalysis.csvType(upload_path):
-                WAG.add_file(f.filename, upload_path)
-            else:
-                print(csvType)
-                return json.dumps({"not ok": 418}, ensure_ascii=False), 418
-        else:
-            print(csvType)
-            return json.dumps({"not ok": 418}, ensure_ascii=False), 418
-    else:
-        print(request.method)
-        return json.dumps({"not ok": 418}, ensure_ascii=False), 418
-
-    return json.dumps({"ok": "?"}, ensure_ascii=False)
+class FileTypeEnum(str, Enum):
+    Auto = "Auto"
+    Alipay = "Alipay"
+    Wechat = "Wechat"
+    WechatZip = "WechatZip"
 
 
 def main():
-    global AAG, WAG
-    db_path = getFilePath()
-    AAG = AlipayAnalysisGroup(db_path)
-    WAG = WechatAnalysisGroup(db_path)
+    logging.basicConfig(
+        level=logging.NOTSET,
+        format="%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+        datefmt="%Y-%m-%d:%H:%M:%S",
+    )
+    logger = logging.getLogger(app_name + ".log")
+    logger.setLevel(logging.DEBUG)
 
-    app.run()
+    app = Flask(app_name + ".flask")
+    # 不用cors的话 可以用nginx
+    CORS(app)
+
+    aag: AlipayAnalysisGroup
+    wag: WechatAnalysisGroup
+
+    # TODO 泛型合并 AAG WAG
+    # AG = {}
+
+    def get_file_path():
+        parser = argparse.ArgumentParser(description="处理Alipay/Wechat的交易记录")
+        parser.add_argument("db", help="db file path")
+        args = parser.parse_args()
+        return args.db
+
+    @app.route("/api/ignore_no", methods=["POST"])
+    def api_ignore_no():
+        query_data = json.loads(request.get_data(as_text=True))
+        if query_data["csvType"] == FileTypeEnum.Alipay:
+            ins_result = aag.ignore_no(query_data)
+        elif query_data["csvType"] == FileTypeEnum.Wechat:
+            ins_result = wag.ignore_no(query_data)
+        else:
+            return json.dumps({"status": 418}), 418
+
+        if not ins_result:
+            return json.dumps({"status": 418}), 418
+
+        return json.dumps({"status": 200}, ensure_ascii=False)
+
+    @app.route("/api/year")
+    def api_year():
+        result = {
+            FileTypeEnum.Wechat: wag.get_year(),
+            FileTypeEnum.Alipay: [],  # aag.get_month(),
+        }
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/year_query", methods=["POST"])
+    def api_year_query():
+        query_data = json.loads(request.get_data(as_text=True))
+        # result = aag.month_query(query_data) + wag.month_query(query_data)
+        result = wag.year_query(query_data)
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/month")
+    def api_month():
+        result = {
+            FileTypeEnum.Wechat: wag.get_month(),
+            FileTypeEnum.Alipay: aag.get_month(),
+        }
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/month_query", methods=["POST"])
+    def api_month_query():
+        query_data = json.loads(request.get_data(as_text=True))
+        result = aag.month_query(query_data) + wag.month_query(query_data)
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/week")
+    def api_week():
+        result = {
+            FileTypeEnum.Wechat: wag.get_week(),
+            FileTypeEnum.Alipay: aag.get_week(),
+        }
+
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/week_query", methods=["POST"])
+    def api_week_query():
+        query_data = json.loads(request.get_data(as_text=True))
+        result = aag.week_query(query_data) + wag.week_query(query_data)
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/ignore_list", methods=["POST"])
+    def api_ignore_list():
+        query_data = json.loads(request.get_data(as_text=True))
+        result = aag.get_ignore_list(query_data) + wag.get_ignore_list(query_data)
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/file_list")
+    def file_list():
+        result = aag.get_groups() + wag.get_groups()
+
+        return json.dumps(result, ensure_ascii=False)
+
+    @app.route("/api/remove_file", methods=["POST"])
+    def remove_file():
+        if request.method == "POST":
+            filename = request.form["filename"]
+            csv_type = request.form["csvType"]
+            logger.debug("csv_type:" + csv_type)
+
+            if csv_type == FileTypeEnum.Alipay:
+                # TODO
+                pass
+            elif csv_type == FileTypeEnum.Wechat:
+                wag.remove_file(filename)
+            else:
+                raise ValueError()
+        else:
+            logger.debug("req method:" + request.method)
+            return json.dumps({"not ok": 418}, ensure_ascii=False), 418
+
+        return json.dumps({"ok": "?"}, ensure_ascii=False)
+
+    # TODO 根据csv内容 自动监测类型
+    # TODO 自动暴力微信zip密码
+    @app.route("/api/upload", methods=["POST"])
+    def api_upload():
+        if request.method == "POST":
+            f = request.files["file"]
+            if f.filename is None:
+                # TODO resp
+                raise ValueError()
+            csv_type = request.form["csvType"]
+
+            upload_folder = os.path.join(tempfile.gettempdir(), "bill_analysis", "uploads")
+            logger.debug("upload folder:" + upload_folder)
+            Path(upload_folder).mkdir(parents=True, exist_ok=True)  # 创建文件夹
+            upload_path = os.path.join(upload_folder, f.filename)
+            logger.debug("upload path:" + upload_path)
+            f.save(upload_path)
+
+            # TODO safe filename
+            # TODO support any encode
+            # TODO support wechat zip crack
+            logging.debug("csv type:" + csv_type)
+
+            def handle_alipay(f):
+                aag.add_file(f.filename, upload_path)
+
+            def handle_wechat(f):
+                # TODO timestamp to filename, and hash to upload_path
+                wag.add_file(f.filename, upload_path)
+
+            if csv_type == FileTypeEnum.Alipay:
+                handle_alipay(f)
+            elif csv_type == FileTypeEnum.Wechat:
+                handle_wechat(f)
+            elif csv_type == FileTypeEnum.Auto:
+                if AlipayAnalysis.is_csv(upload_path):
+                    handle_alipay(f)
+                elif WechatAnalysis.is_csv(upload_path):
+                    handle_wechat(f)
+                elif WechatAnalysis.is_zip_file(upload_path):
+                    # 太耗时了
+                    # ok, pwd = crack_zip(upload_path)
+                    # logger.debug("crack result:" + str(ok))
+                    # logger.debug("      password:" + str(pwd))
+                    logger.info("""Use https://github.com/CroMarmot/zipcracker""")
+                else:
+                    return json.dumps({"not ok": 418}, ensure_ascii=False), 418
+            else:
+                return json.dumps({"not ok": 418}, ensure_ascii=False), 418
+        else:
+            logger.debug("req method:" + request.method)
+            return json.dumps({"not ok": 418}, ensure_ascii=False), 418
+
+        return json.dumps({"ok": "?"}, ensure_ascii=False)
+
+    db_path = get_file_path()
+    aag = AlipayAnalysisGroup(db_path)
+    wag = WechatAnalysisGroup(db_path)
+    app.run(debug=True)
 
 
 if __name__ == "__main__":

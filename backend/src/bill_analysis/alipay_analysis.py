@@ -1,11 +1,11 @@
 import csv
-import json
 import logging
-import os
 import sqlite3
 from datetime import datetime
+from typing import Dict
 
-recordLen = 17
+logger = logging.getLogger("bill_analysis.alipay")
+record_len = 17
 TABLE_IGNORE = "alipay_ignore_table"
 
 """
@@ -27,15 +27,14 @@ TABLE_IGNORE = "alipay_ignore_table"
 "资金状态": "fundState",  # 15
 """
 
-Alipay = 'Alipay'
+Alipay = "Alipay"
 
 
 class IgnoreSet:
     def __init__(self, db_path) -> None:
         con = sqlite3.connect(db_path)
         cur = con.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS " +
-                    TABLE_IGNORE + " (ignore_no text primary key)")
+        cur.execute("CREATE TABLE IF NOT EXISTS " + TABLE_IGNORE + " (ignore_no text primary key)")
         cur.execute("SELECT ignore_no from " + TABLE_IGNORE + "")
         ignore_list = cur.fetchall()
         con.commit()
@@ -54,12 +53,17 @@ class AlipayAnalysis:
 
     # check if it is Alipay
     @staticmethod
-    def csvType(file_path):
-        with open(file_path) as csvfile:
-            spamreader = csv.reader(csvfile)
-            for row in spamreader:
-                # first line
-                return row[0].startswith("支付宝")
+    def is_csv(file_path: str):
+        if file_path.lower().endswith(".csv"):
+            try:
+                with open(file_path) as csvfile:
+                    spamreader = csv.reader(csvfile)
+                    for row in spamreader:
+                        # first line
+                        return row[0].startswith("支付宝")
+            except Exception as e:
+                logger.exception(e)
+                return False
         return False
 
     def row2api(self, row):
@@ -73,29 +77,20 @@ class AlipayAnalysis:
             "refund": row[13],
         }
 
-    def full_list(self):
-        jsonArr = []
-        for row in self.data_mem:
-            obj = {}
-            for i in range(recordLen):
-                obj[head[i]] = row[i]
-            jsonArr.append(obj)
-        return jsonArr
-
     def csv2mem(self, file_path):
-        if not AlipayAnalysis.csvType(file_path):
-            logging.error("Not a Alipay csv or encode error:", file_path)
+        if not AlipayAnalysis.is_csv(file_path):
+            logger.error("Not a Alipay csv or encode error:" + file_path)
             return
         self.data_mem = []
         with open(file_path) as csvfile:
             spamreader = csv.reader(csvfile)
             head = None
             for row in spamreader:
-                if len(row) != recordLen:
+                if len(row) != record_len:
                     continue
-                if head == None:
+                if head is None:
                     # 最后一个是空格
-                    head = [x.strip().strip('\t') for x in row[:-1]]
+                    head = [x.strip().strip("\t") for x in row[:-1]]
                     continue
                 self.data_mem.append([x.strip().strip("\t") for x in row[:-1]])
         self.data_mem.reverse()
@@ -104,46 +99,42 @@ class AlipayAnalysis:
         month = {}
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+            dateobj = datetime.strptime(row[2] + "+08:00", "%Y-%m-%d %H:%M:%S%z")
             no = row[0]
             amount = row[9]
             refund = row[13]
             in_out = row[10]
-            month_str = "{0:%Y-%m}".format(dateobj)
+            month_str = f"{dateobj:%Y-%m}"
             if no in self.ignore_set:
                 continue
 
             if month_str not in month:
-                month[month_str] = {
-                    "in_cnt": 0,
-                    "out_cnt": 0
-                }
-            if in_out == '支出':
-                month[month_str]["out_cnt"] += round(100 *
-                                                     (float(amount) - float(refund)))
+                month[month_str] = {"in_cnt": 0, "out_cnt": 0}
+            if in_out == "支出":
+                month[month_str]["out_cnt"] += round(100 * (float(amount) - float(refund)))
             else:  # 收入
-                month[month_str]["in_cnt"] += round(100*float(amount))
+                month[month_str]["in_cnt"] += round(100 * float(amount))
         return month
 
-    def month_query(self, queryData):
+    def month_query(self, query_data):
         # 默认查询支出
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
+        if "in_out" not in query_data:
+            query_data["in_out"] = "支出"
 
         month_result = []
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+            dateobj = datetime.strptime(row[2] + "+08:00", "%Y-%m-%d %H:%M:%S%z")
             no = row[0]
             in_out = row[10]
-            month_str = "{0:%Y-%m}".format(dateobj)
+            month_str = f"{dateobj:%Y-%m}"
             if no in self.ignore_set:
                 continue
 
-            if month_str != queryData["key"]:
+            if month_str != query_data["key"]:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if in_out != query_data["in_out"]:
                 continue
 
             month_result.append(self.row2api(row))
@@ -153,64 +144,60 @@ class AlipayAnalysis:
         week = {}
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+            dateobj = datetime.strptime(row[2] + "+08:00", "%Y-%m-%d %H:%M:%S%z")
             no = row[0]
             amount = row[9]
             refund = row[13]
             in_out = row[10]
-            week_str = "{0:%Y-%W}".format(dateobj)
+            week_str = f"{dateobj:%Y-%W}"
             if no in self.ignore_set:
                 continue
 
             if week_str not in week:
-                week[week_str] = {
-                    "in_cnt": 0,
-                    "out_cnt": 0
-                }
-            if in_out == '支出':
-                week[week_str]["out_cnt"] += round(100 *
-                                                   (float(amount)-float(refund)))
+                week[week_str] = {"in_cnt": 0, "out_cnt": 0}
+            if in_out == "支出":
+                week[week_str]["out_cnt"] += round(100 * (float(amount) - float(refund)))
             else:  # 收入
-                week[week_str]["in_cnt"] += round(100*float(amount))
+                week[week_str]["in_cnt"] += round(100 * float(amount))
         return week
 
-    def week_query(self, queryData):
+    def week_query(self, query_data):
         # 默认查询支出
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
+        if "in_out" not in query_data:
+            query_data["in_out"] = "支出"
         week_result = []
         for row in self.data_mem:
             # 创建时间 支付时间可能为空
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+            dateobj = datetime.strptime(row[2] + "+08:00", "%Y-%m-%d %H:%M:%S%z")
             no = row[0]
             in_out = row[10]
-            week_str = "{0:%Y-%W}".format(dateobj)
+            week_str = f"{dateobj:%Y-%W}"
             if no in self.ignore_set:
                 continue
 
-            if week_str != queryData["key"]:
+            if week_str != query_data["key"]:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if in_out != query_data["in_out"]:
                 continue
 
             week_result.append(self.row2api(row))
         return week_result
 
-    def ignore_list(self, queryData):
+    def ignore_list(self, query_data):
         # 默认查询支出
-        if "in_out" not in queryData:
-            queryData["in_out"] = "支出"
+        if "in_out" not in query_data:
+            query_data["in_out"] = "支出"
 
         result = []
         for row in self.data_mem:
-            dateobj = datetime.strptime(row[2], "%Y-%m-%d %H:%M:%S")
+            # dateobj = datetime.strptime(row[2]+"+08:00", "%Y-%m-%d %H:%M:%S%z")
             no = row[0]
             in_out = row[10]
             if no not in self.ignore_set:
                 continue
 
-            if in_out != queryData["in_out"]:
+            if in_out != query_data["in_out"]:
                 continue
 
             result.append(self.row2api(row))
@@ -219,30 +206,27 @@ class AlipayAnalysis:
 
 
 class AlipayAnalysisGroup:
-    alipay_groups = {}
+    alipay_groups: Dict[str, AlipayAnalysis]
 
     def __init__(self, db_path) -> None:
         self.db_path = db_path
         self.ig_set = IgnoreSet(db_path)
+        self.alipay_groups = {}
 
     def add_file(self, filename, upload_path):
-        self.alipay_groups[filename] = AlipayAnalysis(
-            upload_path, self.ig_set.ignore_set)
+        self.alipay_groups[filename] = AlipayAnalysis(upload_path, self.ig_set.ignore_set)
 
     def get_groups(self):
         result = []
         for k in self.alipay_groups:
-            result.append({
-                "name": k,
-                "type": Alipay
-            })
+            result.append({"name": k, "type": Alipay})
         return result
 
-    def get_ignore_list(self, queryData):
+    def get_ignore_list(self, query_data):
         result = []
         for key in self.alipay_groups:
             alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.ignore_list(queryData)
+            ins_result = alipay_ins.ignore_list(query_data)
             # TODO merge instead of append
             result += ins_result
 
@@ -259,12 +243,12 @@ class AlipayAnalysisGroup:
 
         return week
 
-    def week_query(self, queryData):
+    def week_query(self, query_data):
         result = []
 
         for key in self.alipay_groups:
             alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.week_query(queryData)
+            ins_result = alipay_ins.week_query(query_data)
             # TODO merge instead of replace
             result += ins_result
 
@@ -281,37 +265,37 @@ class AlipayAnalysisGroup:
 
         return month
 
-    def month_query(self, queryData):
+    def month_query(self, query_data):
         result = []
 
         for key in self.alipay_groups:
             alipay_ins = self.alipay_groups[key]
-            ins_result = alipay_ins.month_query(queryData)
+            ins_result = alipay_ins.month_query(query_data)
             # TODO merge instead of replace
             result += ins_result
         return result
 
-    def ignore_no(self, queryData):
+    def ignore_no(self, query_data):
         ignore_set = self.ig_set.ignore_set
-        op = queryData["op"]
-        if op == 'append':
+        op = query_data["op"]
+        if op == "append":
             con = sqlite3.connect(self.db_path)
             cur = con.cursor()
-            ignore_set.add(queryData["no"])
+            ignore_set.add(query_data["no"])
             # TODO duplicate insert
-            cur.execute(
-                f"insert into {TABLE_IGNORE} values ('{queryData['no']}')")
+            # TODO safe sql
+            cur.execute(f"insert into {TABLE_IGNORE} values ('{query_data['no']}')")
             con.commit()
             con.close()
         elif op == "remove":
-            if queryData["no"] not in ignore_set:
+            if query_data["no"] not in ignore_set:
                 return False
             con = sqlite3.connect(self.db_path)
             cur = con.cursor()
-            ignore_set.remove(queryData["no"])
+            ignore_set.remove(query_data["no"])
             # TODO duplicate insert
-            cur.execute(
-                f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{queryData['no']}' ")
+            # TODO safe sql
+            cur.execute(f"DELETE FROM {TABLE_IGNORE} WHERE ignore_no ='{query_data['no']}' ")
 
             con.commit()
             con.close()
