@@ -3,3 +3,4 @@ alipay_record_*
 __pycache__
 *.db
 tmp
+venv

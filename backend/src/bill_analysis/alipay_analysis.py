@@ -1,10 +1,9 @@
 import csv
-import os
 import json
-import sqlite3
 import logging
+import os
+import sqlite3
 from datetime import datetime
-
 
 recordLen = 17
 TABLE_IGNORE = "alipay_ignore_table"

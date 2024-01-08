@@ -1,16 +1,16 @@
-from wechat_analysis import WechatAnalysis, WechatAnalysisGroup
-from flask.sessions import NullSession
-from flask import Flask, render_template, request
-from flask_cors import CORS
 import argparse
 import csv
-import os
 import json
+import os
 import sqlite3
 from datetime import datetime
 
-from alipay_analysis import AlipayAnalysis, AlipayAnalysisGroup, Alipay
-from wechat_analysis import WechatAnalysisGroup, Wechat
+from flask import Flask, render_template, request
+from flask.sessions import NullSession
+from flask_cors import CORS
+
+from .alipay_analysis import Alipay, AlipayAnalysis, AlipayAnalysisGroup
+from .wechat_analysis import Wechat, WechatAnalysis, WechatAnalysisGroup
 
 # TODO use logging
 

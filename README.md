@@ -28,25 +28,40 @@ https://github.com/CroMarmot/zipcracker
 
 ## 使用
 
-### server
-
-`python3 analysis.py <your db path>`
-
-db 填写路径即可，没有的话会自动生成
-
-使用示例:
+### backend
 
 ```
-python3 analysis.py record.db
+# 进入服务端文件夹
+cd backend
+# 创建虚拟环境
+python3 -m venv venv
+# 启用虚拟环境
+. venv/bin/activate
+# 安装模块及依赖
+pip install -e .
+# 启动服务, 其中<record.db>为存储文件,可以替换
+python3 -m bill_analysis.analysis record.db
 ```
 
-### front_end
+### frontend
 
 ```
-cd front_end
+# 进入前端文件夹
+cd frontend
+# 查看可用node版本
+nvm ls-remote --lts
+# 安装一个v16.x.x的版本, 原始代码比较老,没支持v18
+nvm install v16.20.2
+# 使用对应版本
+nvm use v16.20.2
+# 安装依赖
 yarn
+# 启动服务
 yarn start
 ```
+
+浏览器访问<http://localhost:3000/>
+
 ## 当前功能
 
  - 支持 支付宝账单 和 微信账单
