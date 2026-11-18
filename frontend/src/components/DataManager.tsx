@@ -1,117 +1,103 @@
 import { useEffect, useRef, useState } from "react";
 
-import { makeStyles } from "@material-ui/core/styles";
-import Table from "@material-ui/core/Table";
-import TableBody from "@material-ui/core/TableBody";
-import TableCell from "@material-ui/core/TableCell";
-import TableContainer from "@material-ui/core/TableContainer";
-import TableHead from "@material-ui/core/TableHead";
-import TableRow from "@material-ui/core/TableRow";
-import MenuItem from "@material-ui/core/MenuItem";
-import Button from "@material-ui/core/Button";
-import Select from "@material-ui/core/Select";
-import Paper from "@material-ui/core/Paper";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
 
-import csvTypes from "../utils/FileType";
+import Typography from "@mui/material/Typography";
 
-const useStyles = makeStyles({
-  table: {
-    minWidth: 650,
-  },
-});
+import { OpenAPI } from "../fastapiService/core/OpenAPI";
+import {
+  billGetFileList,
+  billPostRemoveFile,
+} from "../fastapiService/services.gen";
+import type { FileListItem } from "../fastapiService/types.gen";
+import { handleApiError, success } from "../utils/feedbackService";
+import { confirm } from "../utils/confirm";
 
-const DataMancsvTyper = ({
-  url_prefix,
+const DataManager = ({
   refresh,
   updateFn,
+  userId,
 }: {
-  url_prefix: string;
   refresh: Object;
   updateFn: Function;
+  userId: number;
 }) => {
-  const inputRef = useRef() as React.MutableRefObject<HTMLInputElement>;
-  const [data_list, set_data_list] = useState([]);
-  const [csvType, setCsvType] = useState(Object.keys(csvTypes)[0]);
-  const classes = useStyles();
-
-  const handleChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    setCsvType(event.target.value as string);
-  };
+  const inputRef = useRef<HTMLInputElement>(null!);
+  const [data_list, set_data_list] = useState<FileListItem[]>([]);
 
   useEffect(() => {
-    fetch(`${url_prefix}/api/file_list`)
-      .then((data) => data.json())
-      .then((r) => set_data_list(r));
+    billGetFileList({ userId }).then((res) => {
+      set_data_list(res as unknown as FileListItem[]);
+    }).catch(handleApiError);
+  }, [refresh, userId]);
 
-    return () => {
-      // cleanup
-    };
-  }, [refresh, url_prefix]);
-
-  const uploadCsv = () => {
-    if (
-      inputRef.current.files === null ||
-      inputRef.current.files.length === 0
-    ) {
-      alert("files NULL");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", inputRef.current.files[0]);
-    formData.append("csvType", csvType);
-
-    fetch(`${url_prefix}/api/upload`, {
-      method: "POST",
-      body: formData,
-    })
-      .then((response) => response.json())
-      .then(() => {
-        updateFn();
-      })
-      .catch((error) => {
-        console.error("Error:", error);
-      });
+  const uploadFiles = () => {
+    inputRef.current.click();
   };
 
-  const removeFile = (filename: string, csvType: string) => {
+  const handleFilesSelected = () => {
+    const files = inputRef.current.files;
+    if (!files || files.length === 0) return;
     const formData = new FormData();
-    formData.append("filename", filename);
-    formData.append("csvType", csvType);
+    for (let i = 0; i < files.length; i++) {
+      formData.append("files", files[i]);
+    }
+    formData.append("user_id", String(userId));
 
-    fetch(`${url_prefix}/api/remove_file`, {
+    fetch(`${OpenAPI.BASE}/api/upload`, {
       method: "POST",
       body: formData,
-    })
-      .then((response) => response.json())
-      .then(() => {
-        updateFn();
-      })
-      .catch((error) => {
-        console.error("Error:", error);
-      });
+    }).then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      updateFn();
+    }).catch(handleApiError);
+    inputRef.current.value = "";
+  };
+
+  const removeFile = (filename: string, ftype: string) => {
+    billPostRemoveFile({
+      formData: {
+        filename,
+        csvType: ftype,
+        user_id: userId,
+      },
+    }).then(() => {
+      updateFn();
+      success("文件已删除");
+    }).catch(handleApiError);
   };
 
   return (
     <>
-      <input type="file" ref={inputRef} />
-      <Select
-        value={csvType}
-        onChange={handleChange}
-        inputProps={{ "aria-label": "Without label" }}
-      >
-        {Object.keys(csvTypes).map((key) => (
-          <MenuItem key={key} value={key}>
-            {csvTypes[key]}
-          </MenuItem>
-        ))}
-      </Select>
-      <Button onClick={uploadCsv}
+      <Typography sx={{ mb: 1 }}>
+        <strong>支付宝下载步骤：</strong>
+        打开支付宝 → "我的" → "账单" → 右上角三个点 → "开具交易流水证明" →
+        "用于个人对账" → "申请" → 等待支付宝处理完成后下载 csv 文件
+      </Typography>
+      <Typography sx={{ mb: 1 }}>
+        <strong>微信下载步骤：</strong>
+        打开微信 → "我" → "服务" → "钱包" → "账单" → 右上角三个点 →
+        "下载账单" → "用于个人对账" → "下一步" → "刷脸认证" →
+        等待微信官方处理完成后，"微信支付" → "账单流水文件" → 下载 xlsx 文件
+      </Typography>
+      <Typography sx={{ mb: 1, color: "text.secondary", fontSize: "0.875rem" }}>
+        提示：选择自定义日期范围，可以跨度拉大到1年
+      </Typography>
+      <input type="file" ref={inputRef} multiple accept=".csv,.xlsx" onChange={handleFilesSelected} style={{ display: "none" }} />
+      <Button onClick={uploadFiles}
         variant="contained"
-        color="primary">分析</Button>
+        color="primary">选择文件并上传</Button>
       <div>
         <TableContainer component={Paper}>
           <Table
-            className={classes.table}
+            sx={{ minWidth: 650 }}
             size="small"
             aria-label="simple table"
           >
@@ -123,7 +109,7 @@ const DataMancsvTyper = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {data_list.map((element: { name: string; type: string }) => (
+              {data_list.map((element: FileListItem) => (
                 <TableRow key={element.name}>
                   <TableCell component="th" scope="row">
                     {element.name}
@@ -131,7 +117,14 @@ const DataMancsvTyper = ({
                   <TableCell align="right">{element.type}</TableCell>
                   <TableCell align="right">
                     <Button
-                      onClick={() => removeFile(element.name, element.type)}
+                      onClick={() => {
+                        confirm(
+                          "确认删除",
+                          `确定要删除文件 "${element.name}" 及其所有记录吗？`
+                        ).then((ok) => {
+                          if (ok) removeFile(element.name, element.type);
+                        });
+                      }}
                       variant="contained"
                       color="primary"
                     >
@@ -148,4 +141,4 @@ const DataMancsvTyper = ({
   );
 };
 
-export default DataMancsvTyper;
+export default DataManager;

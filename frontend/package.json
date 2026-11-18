@@ -3,28 +3,36 @@
     "version": "0.1.0",
     "private": true,
     "dependencies": {
-        "@material-ui/core": "^4.12.1",
-        "@material-ui/icons": "^4.11.2",
-        "@testing-library/jest-dom": "^5.11.4",
-        "@testing-library/react": "^11.1.0",
-        "@testing-library/user-event": "^12.1.10",
+        "@cromarmot/pagination": "^0.0.5",
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.0",
+        "@mui/icons-material": "^6.4.0",
+        "@mui/material": "^6.4.0",
+        "@testing-library/jest-dom": "^6.6.3",
+        "@testing-library/react": "^16.2.0",
+        "@testing-library/user-event": "^14.6.1",
         "@types/echarts": "^4.9.9",
-        "@types/jest": "^26.0.15",
-        "@types/node": "^12.0.0",
-        "@types/react": "^17.0.0",
-        "@types/react-dom": "^17.0.0",
-        "echarts": "^5.1.2",
-        "react": "^17.0.2",
-        "react-dom": "^17.0.2",
-        "react-scripts": "4.0.3",
-        "typescript": "^4.1.2",
+        "@types/jest": "^29.5.14",
+        "@types/node": "^22.13.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "echarts": "^5.6.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "react-hot-toast": "^2.6.0",
+        "react-scripts": "5.0.1",
+        "typescript": "^5.7.0",
         "web-vitals": "^1.0.1"
+    },
+    "devDependencies": {
+        "@hey-api/openapi-ts": "^0.52.11"
     },
     "scripts": {
         "start": "BROWSER=none react-scripts start",
         "build": "react-scripts build",
         "test": "react-scripts test",
-        "eject": "react-scripts eject"
+        "eject": "react-scripts eject",
+        "client-gen": "openapi-ts"
     },
     "eslintConfig": {
         "extends": [
